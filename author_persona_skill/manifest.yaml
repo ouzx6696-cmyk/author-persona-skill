@@ -1,0 +1,151 @@
+# 作家分身Skill - 通用配置文件
+# 兼容各大Agent平台（Dify、Coze等）
+
+name: "作家分身Skill"
+version: "1.0.0"
+description: "基于深度风格解构，创建高保真的作家文学分身，实现专业级文风仿写"
+author: "专家级作者系统团队"
+homepage: ""
+avatar: ""
+
+# 平台兼容性
+compatible_platforms:
+  - dify
+  - coze
+  - langchain
+  - custom
+
+# 权限要求
+permissions:
+  - read_files
+  - write_files
+  - llm_call
+
+# 环境变量
+environment_variables:
+  - name: LLM_PROVIDER
+    description: "LLM提供商 (openai/deepseek/claude)"
+    required: false
+    default: "openai"
+  - name: LLM_API_KEY
+    description: "LLM API密钥"
+    required: true
+  - name: LLM_BASE_URL
+    description: "LLM API基础URL"
+    required: false
+  - name: LLM_MODEL
+    description: "LLM模型名称"
+    required: false
+
+# Skill主要功能
+functions:
+  - name: "analyze_style"
+    description: "深度分析小说文本，提取作家风格指纹"
+    inputs:
+      - name: "corpus_text"
+        type: "string"
+        description: "小说原文文本"
+        required: true
+      - name: "author_name"
+        type: "string"
+        description: "作家名称"
+        required: true
+    outputs:
+      - name: "style_profile"
+        type: "object"
+        description: "完整的风格指纹数据"
+
+  - name: "compile_persona"
+    description: "将风格指纹编译为分身提示词"
+    inputs:
+      - name: "style_profile"
+        type: "object"
+        description: "风格指纹数据"
+        required: true
+      - name: "author_name"
+        type: "string"
+        description: "作家名称"
+        required: true
+      - name: "scene_type"
+        type: "string"
+        description: "场景类型 (battle/dialogue/scene/emotion/momentum/transition)"
+        required: false
+    outputs:
+      - name: "persona_prompt"
+        type: "string"
+        description: "编译后的分身提示词"
+
+  - name: "generate_with_persona"
+    description: "使用作家分身进行文本生成"
+    inputs:
+      - name: "persona_prompt"
+        type: "string"
+        description: "分身提示词"
+        required: true
+      - name: "user_request"
+        type: "string"
+        description: "用户创作需求"
+        required: true
+      - name: "style_profile"
+        type: "object"
+        description: "风格指纹（用于裁判评估）"
+        required: false
+      - name: "enable_iteration"
+        type: "boolean"
+        description: "是否启用迭代优化"
+        required: false
+        default: false
+      - name: "max_iterations"
+        type: "integer"
+        description: "最大迭代次数"
+        required: false
+        default: 3
+    outputs:
+      - name: "final_text"
+        type: "string"
+        description: "最终生成的文本"
+      - name: "iterations"
+        type: "array"
+        description: "迭代过程记录"
+      - name: "final_score"
+        type: "number"
+        description: "最终评分"
+
+  - name: "complete_workflow"
+    description: "完整工作流：从语料到生成的一站式处理"
+    inputs:
+      - name: "corpus_text"
+        type: "string"
+        description: "小说原文文本"
+        required: true
+      - name: "author_name"
+        type: "string"
+        description: "作家名称"
+        required: true
+      - name: "user_request"
+        type: "string"
+        description: "用户创作需求"
+        required: true
+      - name: "enable_iteration"
+        type: "boolean"
+        description: "是否启用迭代优化"
+        required: false
+        default: true
+    outputs:
+      - name: "style_profile"
+        type: "object"
+        description: "风格指纹"
+      - name: "persona_prompt"
+        type: "string"
+        description: "分身提示词"
+      - name: "final_text"
+        type: "string"
+        description: "最终生成文本"
+
+# 使用说明
+usage: |
+  1. 上传小说原文文本到corpus_text
+  2. 调用analyze_style分析风格
+  3. 调用compile_persona编译分身
+  4. 调用generate_with_persona进行生成
+  或直接调用complete_workflow一站式完成
