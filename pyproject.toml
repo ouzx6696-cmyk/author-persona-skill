@@ -1,0 +1,23 @@
+[build-system]
+requires = []
+build-backend = "build_backend"
+backend-path = ["."]
+
+[project]
+name = "author-persona-skill"
+version = "10.2.0"
+description = "脱敏、分层采样与可验证风格能力报告工具"
+requires-python = ">=3.10"
+dependencies = []
+authors = [{ name = "专家级作者系统团队" }]
+license = "MIT"
+license-files = ["LICENSE"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+  "Topic :: Text Processing :: Linguistic",
+  "License :: OSI Approved :: MIT License",
+]
+
+[project.scripts]
+author-persona-skill = "author_persona_skill.cli:main"

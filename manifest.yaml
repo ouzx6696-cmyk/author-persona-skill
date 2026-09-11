@@ -1,0 +1,233 @@
+name: "author-persona-skill"
+version: "10.2.0"
+description: "当需要解构小说文风、提取写作技法、生成风格能力报告或制作作家分身系统提示词时使用——用户提到文风分析、文笔诊断、语言风格量化、模仿某位作者的写法时即应触发，无需点名本技能。产出四层报告（第〇部分 作家契约层/定量层/技法调用卡层/思维层，第〇部分由 JSON 的 writer_contract 单一真源渲染）：指标数值一律经占位符注入本地实测值，核心指标与实测冲突即拒绝；技法卡须通过行文机制闸门并逐条证据回验；报告默认全脱敏，只模仿行文机制、不复刻原作内容与专名。输出脱敏人读 Markdown 与机器读 report.json（schema_version \"5\"），可经 novel-writer 按转译映射表一次落位为项目人格与设定。本技能只负责理解与报告，不负责新故事的剧情设计、类型定位与技法调用决策。面向中文小说语料，纯标准库实现。"
+author: "专家级作者系统团队"
+category: "内容创作"
+
+compatible_platforms:
+  - dify
+  - coze
+  - solo
+  - langchain
+  - custom
+
+permissions:
+  - read_files
+  - write_files
+
+functions:
+  - name: "prepare_analysis"
+    description: "Step 1: 本地前置降噪、五时期分层采样(chapter_idx/era_id)、定量计算、Evidence Units(EID)与Metric Registry(MID)构建、专名候选提取，组装含占位符+MID注册表与UNTRUSTED边界的 LLM prompt。返回 llm_prompt 和 llm_system_msg，agent 用这两个字段调用 LLM。"
+    inputs:
+      - name: "corpus_path"
+        type: "string"
+        description: "小说语料文件路径 (.txt)，优先于 corpus_text"
+        required: false
+      - name: "corpus_text"
+        type: "string"
+        description: "小说纯文本内容（内存输入）"
+        required: false
+      - name: "author_name"
+        type: "string"
+        description: "来源作者姓名（仅用于元信息登记与脱敏检测，不写入扮演身份）"
+        required: false
+      - name: "work_title"
+        type: "string"
+        description: "作品标题或代号"
+        required: false
+      - name: "options"
+        type: "object"
+        description: "高级选项：desensitize, generate_system_prompt, allow_author_identity, include_raw_evidence, sample_budget_chars"
+        required: false
+    outputs:
+      - name: "llm_prompt"
+        type: "string"
+        description: "发给LLM的完整Prompt"
+      - name: "llm_system_msg"
+        type: "string"
+        description: "LLM System消息"
+      - name: "evidence_store"
+        type: "object"
+        description: "按 chunk_id 原文存储，供 finalize 字符串回验（字符串回验路径；主路径为 evidence_store_ids）"
+      - name: "evidence_store_ids"
+        type: "object"
+        description: "Trusted Evidence Store: EID->{text,chunk_id,era,era_id,offsets}。Prompt 引导 LLM 回 ID；未回 ID 时退化为 chunk_id+quote 的原文字符串回验，EID 存在性门禁不生效"
+      - name: "metric_registry"
+        type: "object"
+        description: "MID注册表: M001->{value,unit,scope,formula,metric_version}，支持{{metric:M001}}"
+      - name: "era_map"
+        type: "object"
+        description: "chunk 与五时期（开头 (Begin)/发展 (Develop)/成熟 (Mature)/演变 (Evolve)/结尾 (Ending)）的归属映射"
+      - name: "era_spans"
+        type: "array"
+        description: "采样章节的时期区间（start/end/era），供 finalize 按引文偏移回验时期"
+      - name: "quantitative_features"
+        type: "object"
+        description: "定量统计特征数据"
+      - name: "proper_noun_candidates"
+        type: "array"
+        description: "专名与高频词候选清单"
+      - name: "era_excerpts"
+        type: "array"
+        description: "每时期一个代表 excerpt（约900字），供 LLM 作跨期对照原文"
+      - name: "era_window_metrics"
+        type: "array"
+        description: "每时期窗口的 StyleAnalyzer 输出，供 finalize 推导作者自然波动区间（中位数±k·MAD）"
+      - name: "prepare_meta"
+        type: "object"
+        description: "采样区间、噪音过滤比例等元信息（含 prepare_schema_version，finalize 据此校验阶段契约）"
+
+  - name: "finalize_analysis"
+    description: "Step 3: 解析LLM响应，替换占位符+MID引用，执行结构体检、严格Schema（EID/MID 存在性在响应确实携带时核销；claims 为可选扩展层，仅在响应携带时校验）、证据回验（EID优先+跨期按卡校验+era实测重推导）、脱敏反向校验、全产物终检、数值审计；另产出质量自评(integrity/quality/privacy->publishable)——quality 为事后自评，不参与拒绝判定。试写触发保真闭环（含复制检测）；失败仅落盘 *_rejected.md，通过则生成单一真源正式报告、{base_name}_manifest.json 与 report.json（含provenance/validation_summary/fidelity）。"
+    inputs:
+      - name: "prepare_result"
+        type: "object"
+        description: "prepare_analysis() 返回的结果字典"
+        required: true
+      - name: "llm_response"
+        type: "string"
+        description: "LLM 返回的完整响应文本（含正文与末尾 json block）"
+        required: true
+      - name: "output_dir"
+        type: "string"
+        description: "报告与 JSON 文件保存目录"
+        required: false
+      - name: "base_name"
+        type: "string"
+        description: "文件基础名"
+        required: false
+      - name: "trial_text"
+        type: "string"
+        description: "可选试写文本；传入即触发保真闭环并写入报告附录"
+        required: false
+    outputs:
+      - name: "report_content"
+        type: "string"
+        description: "四部分完整 Markdown 报告（第〇部分作家契约层 + 定量层 + 技法调用卡层 + 思维层）"
+      - name: "report_json"
+        type: "object"
+        description: "机器读 report.json 数据副本；默认 artifact_policy=public_sanitized，原始证据仅在显式 include_raw_evidence 时进入私有 sidecar"
+      - name: "report_path"
+        type: "string"
+        description: "Markdown 报告文件保存路径"
+      - name: "report_json_path"
+        type: "string"
+        description: "JSON sidecar 文件保存路径"
+      - name: "rejected_path"
+        type: "string"
+        description: "校验失败时的拒绝产物路径；成功时为 null（此时 report_path 有效）"
+      - name: "desensitization_map_path"
+        type: "string"
+        description: "专名脱敏映射表保存路径；脱敏关闭或映射为空时为 null"
+      - name: "files_saved"
+        type: "object"
+        description: "落盘产物路径表（report_md_path/report_json_path/desensitization_map_path/private_evidence_path/system_prompt_path/rejected_path）"
+      - name: "fidelity"
+        type: "object"
+        description: "传入 trial_text 时的保真闭环结果"
+      - name: "validation"
+        type: "object"
+        description: "校验结果（schema/desensitization/evidence/numeric_audit/quality/warnings/errors）；errors 非空即阻断"
+      - name: "repair_prompt"
+        type: "string"
+        description: "校验失败时的修复提示词（错误清单+修法+可引用证据菜单+输出契约速查），追加到同一会话重试即可；成功时为 null"
+      - name: "system_prompt"
+        type: "string"
+        description: "可选生成的作家分身系统提示词"
+      - name: "status"
+        type: "string"
+        description: "执行状态 (passed / failed)"
+
+  - name: "process_large_file"
+    description: "扫描大文件，建立章节目录索引与5时期（开头 (Begin)/发展 (Develop)/成熟 (Mature)/演变 (Evolve)/结尾 (Ending)）分层阅读计划。"
+    inputs:
+      - name: "file_path"
+        type: "string"
+        description: "小说文件路径"
+        required: true
+      - name: "budget_chars"
+        type: "integer"
+        description: "采样总字符预算（默认 150000）"
+        required: false
+    outputs:
+      - name: "total_chapters"
+        type: "integer"
+        description: "识别出的章节总数"
+      - name: "reading_plan"
+        type: "object"
+        description: "分层采样结果与时期覆盖描述"
+      - name: "encoding"
+        type: "string"
+        description: "识别到的文件编码"
+      - name: "is_fallback"
+        type: "boolean"
+        description: "是否降级为虚拟分段（无显式章节标题时为 true）"
+      - name: "noise_ratio"
+        type: "number"
+        description: "噪音过滤比例（0-1）"
+      - name: "noise_ratio_pct"
+        type: "string"
+        description: "噪音占比百分比字符串"
+
+  - name: "analyze_style"
+    description: "纯定量 11 类风格指标（句法/段落/对话/标点/修辞/视角/描写等）与场景切换密度测量。直接返回扁平定量 dict（含 text_summary/sentence_structure/dialogue_features/style_markers 等键），无 features 包裹层。"
+    inputs:
+      - name: "text"
+        type: "string"
+        description: "待分析文本"
+        required: true
+    outputs:
+      - name: "text_summary"
+        type: "object"
+        description: "文本总量与噪音占比等概要"
+      - name: "sentence_structure"
+        type: "object"
+        description: "句长/短长句率等句法结构"
+      - name: "dialogue_features"
+        type: "object"
+        description: "对话占比/道说比等对话特征"
+      - name: "style_markers"
+        type: "array"
+        description: "核心风格标记列表（另含修辞/视角/描写等定量键，详见 StyleAnalyzer.analyze 返回）"
+
+  - name: "run_fidelity_check"
+    description: "保真度闭环校验：将试写文本与基准指标及技法卡比对，生成偏差表。"
+    inputs:
+      - name: "trial_text"
+        type: "string"
+        description: "试写全新场景文本"
+        required: true
+      - name: "reference_metrics"
+        type: "object"
+        description: "基准定量指标字典"
+        required: true
+      - name: "technique_cards"
+        type: "array"
+        description: "待核对的技法卡列表"
+        required: false
+    outputs:
+      - name: "status"
+        type: "string"
+        description: "保真度验收状态 (passed/failed)"
+      - name: "deviations_table"
+        type: "array"
+        description: "核心指标偏差明细"
+      - name: "technique_card_evaluations"
+        type: "array"
+        description: "技法卡逐项判定（finalize 附录依赖此键）"
+      - name: "trial_metrics"
+        type: "object"
+        description: "试写文本实测指标"
+      - name: "overall_reasons"
+        type: "array"
+        description: "未通过原因列表"
+
+core_constraint: |
+  模仿风格，而非复刻内容：
+  - 提炼去标识化、可迁移的文风机制（句段呼吸、标点功能、对话标签、描写配比、作家心智）
+  - 严禁在报告主体绑定原作者扮演身份，严禁使用原作角色名与专有名词
+  - 技法卡必须是行文机制，情节梗概或题材设定一律由内容闸门拒绝
+  - 第一部分数值只经占位符注入，手写数字与实测不符即整份拒绝
+  - 报告第〇/二/三部分由 JSON 机器块单一真源渲染（writer_contract/technique_cards/thinking_layer），Markdown 与 report.json 不允许出现两套内容
+  - 跨期证据按卡校验，证据时期由语料实测重推导，不信任 LLM 自报值
+  - 产出机器副本供 novel-writer 直接加载使用
