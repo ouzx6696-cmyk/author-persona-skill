@@ -7,11 +7,11 @@ metadata:
   category: 内容创作
 ---
 
-# 作家分身技能 (Author Persona Skill) v10.2.0
+# 作家分身技能 (Author Persona Skill)
 
 > 一句话：把一部小说读成一份**可迁移的行文机制说明书**，并用实测数值把它钉死。
 
-> 本技能注册名为 `author-persona-skill`，代码包与目录名为 `author_persona_skill`，同指本技能；报告 schema（`schema_version "5"`）自 10.0.0 起保持稳定。
+> 本技能注册名为 `author-persona-skill`，代码包与目录名为 `author_persona_skill`，同指本技能；报告 schema 为 `schema_version "5"`。
 
 ## 我负责什么
 
@@ -226,7 +226,7 @@ novel-writer（故事创作）：报告能力 → state/author_persona.md 项目
 
 - 本技能交付**观察与证据**，不替新故事做选择——采用、改写、舍弃哪些能力，由 `novel-writer` 侧依据本书故事承诺在项目人格中裁决；**不维护独立转接文件**，落位结果直接写进 `author_persona.md` 与 `story_bible.md`；
 - 转译由 `novel-writer` 的虚拟作家人工完成，逐项按 `references/style_report_mapping.md` 的映射表落位；报告路径登记在项目 `state/memory.md` 的「五、风格报告」（两技能同仓时按相对路径引用，跨仓使用时以目标项目版本为准），本技能不参与项目人格生成与技法调用决策；
-- 报告原文始终保留在项目外；`novel-writer` 的转译映射表只覆盖现行四层报告（`schema_version "5"`，10.0.0 起），更早的非四层报告不在其覆盖范围内。
+- 报告原文始终保留在项目外；`novel-writer` 的转译映射表只覆盖现行四层报告（`schema_version "5"`）。
 
 衔接示例：
 

@@ -57,17 +57,7 @@ def build_archive(source: Path, output: Path) -> dict[str, object]:
     return {"output": str(output), "sha256": digest, "files": files}
 
 
-_ASSET_VERSION_RE = re.compile(r"^> \*\*报告版本\*\*：v(\d+\.\d+\.\d+)", re.M)
-_TITLE_VERSION_RE = re.compile(r"^# .*?v(\d+\.\d+\.\d+)", re.M)
 _VERSION_FILE_RE = re.compile(r'^VERSION = "([^"]+)"', re.M)
-
-# 静态资源里的版本号是"文档一致性"项：没有任何 Python 代码读取这些文件
-# （报告头由 renderer.py 用 __version__ 拼出）。但漂移会误导人，一并校验。
-_ASSET_VERSION_FILES = (
-    "assets/templates/report_template_full.md",
-    "assets/examples/historical_style_report.md",
-    "assets/examples/xuanhuan_style_report.md",
-)
 
 
 def _pyproject_version(source: Path):
@@ -113,13 +103,7 @@ def _assert_version_consistency(source: Path) -> None:
         frontmatter = "\n".join(lines[:15])
         version_match = re.search(r"^(?:version|  version):\s*[\"']?([^\"'\s]+)", frontmatter, re.M)
         check("SKILL.md", version_match.group(1) if version_match else None, "frontmatter")
-        # H1 标题里的 vX.Y.Z（原文第 9 行；放宽到前 15 行）
-        check("SKILL.md", _first_match("\n".join(lines[:15]), _TITLE_VERSION_RE), "H1 标题")
 
-    for rel in _ASSET_VERSION_FILES:
-        path = source / rel
-        if path.exists():
-            check(rel, _first_match(path.read_text(encoding="utf-8"), _ASSET_VERSION_RE), "报告版本行")
 
     # 安全网：源码树的 _version.py 不应带烧录值（烧录只发生在 wheel 内）
     version_py = source / "scripts" / "author_persona_skill" / "_version.py"

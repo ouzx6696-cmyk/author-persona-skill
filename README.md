@@ -17,7 +17,7 @@
 | 第二部分 技法调用卡 | 可执行的行文机制（句式 / 段落 / 标点 / 对话标签 / 视角调度） | `report.json` 机器块 |
 | 第三部分 作家创作思维 | 6 个思维维度 + 题材适配边界 | `report.json` 的 `thinking_layer` |
 
-输出为**脱敏人读 Markdown** 与**机器读 `report.json` sidecar**（`schema_version "5"`，自 10.0.0 起稳定）。
+输出为**脱敏人读 Markdown** 与**机器读 `report.json` sidecar**（`schema_version "5"`）。
 
 ## 三条核心机制
 

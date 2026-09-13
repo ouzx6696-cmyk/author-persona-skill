@@ -7,7 +7,7 @@ from __future__ import annotations
 # （__init__ -> pipeline -> renderer），详见 _version.py 顶部的 CONTRACT。
 from ._version import __version__
 
-# 公共接口清单在 _api.py 单一真源；根目录 shim 转发同一份，不再各维护一份。
+# 公共接口清单在 _api.py 单一真源；根目录 shim 转发同一份。
 from ._api import *  # noqa: F401,F403
 from ._api import __all__ as _API_EXPORTS
 

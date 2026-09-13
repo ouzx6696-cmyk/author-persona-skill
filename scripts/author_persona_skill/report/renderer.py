@@ -365,7 +365,7 @@ def render_report_outputs(
     header_lines = [
         f"# 《{public_title}》风格能力解构报告",
         "",
-        f"> **报告版本**：v{__version__} (四层契约 · 脱敏 · 证据锚点 · 保真闭环)",
+        "> **报告契约**：四层契约 · 脱敏 · 证据锚点 · 保真闭环",
         f"> **分析对象**：{public_title}（来源作者标记：{public_author}）",
         f"> **采样范围**：{meta.get('sample_range_desc', '全样本/代表性采样')}",
         f"> **降噪过滤**：已清洗平台寄语与格式噪音（噪音占比: {meta.get('noise_ratio_pct', '0.00%')}）",

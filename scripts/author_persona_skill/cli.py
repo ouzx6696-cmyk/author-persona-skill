@@ -114,7 +114,7 @@ def _main_command(args) -> int:
         if args.output_prompt:
             prompt_path = Path(args.output_prompt)
             prompt_path.parent.mkdir(parents=True, exist_ok=True)
-            # system 消息不再只藏在 prep.json：prompt.txt 头部带一行，
+            # system 消息随 prompt.txt 头部输出一行，
             # 纯 CLI 工作流的用户不必反序列化中间产物才能拿到它。
             _sys = res.get("llm_system_msg") or ""
             prompt_path.write_text(

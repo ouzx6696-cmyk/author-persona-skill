@@ -8,8 +8,7 @@
 2. 把 ``scripts/author_persona_skill`` 并入 ``__path__``，让
    ``author_persona_skill.pipeline`` 之类的子模块能被解析。
 
-随后转发到 ``scripts/author_persona_skill/_api.py`` 的公共接口——导出清单只有
-一份，这个 shim 不再维护第二份。
+随后转发到 ``scripts/author_persona_skill/_api.py`` 的公共接口——导出清单只有一份。
 """
 from __future__ import annotations
 
