@@ -21,3 +21,13 @@ classifiers = [
 
 [project.scripts]
 author-persona-skill = "author_persona_skill.cli:main"
+
+[tool.ruff]
+target-version = "py310"
+# 只开语法错误与 Pyflakes：未用导入/未用局部变量这类真实缺陷。
+# 刻意不开默认全量规则（UP/I 等风格项会产出数百条噪音），保持信号干净。
+line-length = 120
+extend-exclude = ["dist", "assets"]
+
+[tool.ruff.lint]
+select = ["E9", "F"]

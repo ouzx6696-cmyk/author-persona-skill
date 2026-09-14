@@ -136,7 +136,6 @@ def build_system_prompt(
     cp_ratio = _num(quant.get("punctuation_ratios", {}).get("comma_period_ratio"))
     met = _num(rh.get("metaphor_density"))
     par = _num(rh.get("parallelism_density"))
-    long_ratio = sent.get("long_sent_ratio_pct")
     dao_shuo = _num(dlg.get("dao_shuo_ratio"))
 
     def _bl(value: Optional[float], unit: str = "字") -> str:

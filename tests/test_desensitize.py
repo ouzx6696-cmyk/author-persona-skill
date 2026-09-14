@@ -8,7 +8,6 @@ from author_persona_skill.distill.desensitize import (
     apply_desensitization,
     build_forbidden_identities,
     compute_work_id,
-    extract_proper_noun_candidates,
     mask_evidence_quotes,
     scan_artifact,
     validate_desensitization,

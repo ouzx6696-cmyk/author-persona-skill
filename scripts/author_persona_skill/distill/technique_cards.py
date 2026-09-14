@@ -2,8 +2,8 @@
 """Technique Card definitions, schema validation, content heuristics, and rendering."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Any, Dict, List, Tuple
 
 
 # ---------------------------------------------------------------------------

@@ -9,7 +9,6 @@ from pathlib import Path
 
 from author_persona_skill import finalize_analysis
 from author_persona_skill.contracts import PREPARE_SCHEMA_VERSION
-from author_persona_skill.report.renderer import extract_json_block
 
 from tests import _fixtures as fx
 

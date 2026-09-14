@@ -2,10 +2,9 @@
 """Quantitative style analyzer (17 dimensions + scene switching density + clean stats)."""
 from __future__ import annotations
 
-import math
 import re
 from collections import Counter
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from .noise import filter_noise
 from .dialogue_analyzer import DialogueAnalyzer

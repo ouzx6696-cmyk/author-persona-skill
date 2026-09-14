@@ -8,7 +8,7 @@ LLM 只输出标题行，正文由 JSON 机器块的 ``writer_contract`` 渲染�
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
 
 # 显式缺省通道：语料证据不足以合成某字段时允许声明缺失，禁止编造。

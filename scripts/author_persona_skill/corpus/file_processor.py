@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Tuple, Optional
+from typing import Tuple
 
 
 CANDIDATE_ENCODINGS = ["utf-8", "gb18030", "gbk", "big5"]

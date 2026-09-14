@@ -7,7 +7,6 @@ import unittest
 from author_persona_skill.distill.evidence import (
     MIN_QUOTE_CHARS,
     build_chunk_offsets,
-    build_evidence_store,
     create_chunks,
     derive_evidence_era,
     enforce_evidence_reinforcement,

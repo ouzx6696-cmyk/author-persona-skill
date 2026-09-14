@@ -110,7 +110,6 @@ def build_repair_prompt(
 ) -> str:
     """Compose the follow-up user message that asks for a corrected response."""
     brief = build_repair_brief(validation, parsed_json)
-    meta = prepare_result.get("prepare_meta", {}) or {}
     candidates = [
         str(item.get("term", ""))
         for item in (prepare_result.get("proper_noun_candidates") or [])

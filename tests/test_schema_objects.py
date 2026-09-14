@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from author_persona_skill.distill.claims import Claim, validate_claims
+from author_persona_skill.distill.claims import validate_claims
 from author_persona_skill.distill.technique_cards import (
     QUOTE_MAX_CHARS,
     TechniqueCard,

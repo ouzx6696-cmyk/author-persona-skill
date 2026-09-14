@@ -345,11 +345,6 @@ def derive_evidence_era(
     return str(era_map.get(cid, "")).strip()
 
 
-# 引文回验最短门槛：任何 ≥6 字的原文片段才可能成为「已验证锚点」。
-# 旧值 2 等于放行任意双字片段（如人名）冒充证据；这是模块常量，可回调。
-MIN_QUOTE_CHARS = 6
-
-
 def verify_evidence_item(
     quote: str,
     target_chunk_id: str,
