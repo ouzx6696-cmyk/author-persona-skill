@@ -17,7 +17,9 @@
 | 第二部分 技法调用卡 | 可执行的行文机制（句式 / 段落 / 标点 / 对话标签 / 视角调度） | `report.json` 机器块 |
 | 第三部分 作家创作思维 | 6 个思维维度 + 题材适配边界 | `report.json` 的 `thinking_layer` |
 
-输出为**脱敏人读 Markdown** 与**机器读 `report.json` sidecar**（`schema_version "5"`）。
+四层之后另附三个附录（不改变四层标题，下游映射锚点不受影响）：附录 A 跨期对比矩阵（6 维实测演变量与趋势）、附录 B 定量扩展（低层测量层：可读性 / 词汇丰富度 / 句法复杂度 / 情感 / 词长词性 / 世界观五类 / 语义子维度 / 知识候选）、附录 C 分身配套产物（平台部署配置与三套风格模板摘要）。
+
+输出为**脱敏人读 Markdown** 与**机器读 `report.json` sidecar**（`schema_version "6"`）。
 
 ## 三条核心机制
 
@@ -52,7 +54,7 @@
 
 ## 快速开始
 
-需要 Python ≥ 3.10，纯标准库，无第三方依赖。
+需要 Python ≥ 3.10。分词依赖内嵌于 `libs/`（纯 Python jieba），无需外部安装；缺失时自动降级为正则近似并标注弱信号。
 
 ```bash
 pip install -e .
@@ -117,21 +119,21 @@ prepare_result = prepare_analysis(
 
 报告主体严禁绑定原作者扮演式身份。规则细节见 `references/desensitization.md`。
 
-## 与 novel-writer 协作
+## 与 novel-writer 协作（可选互操作）
 
-两个技能构成一套创作系统的先后两环：
+本技能**独立运行**：给一份语料，产出四层报告与分身提示词，不依赖其他技能。若下游另有 [novel-writer](https://github.com/ouzx6696-cmyk/novel-writer) 这样的创作侧技能，可按下图衔接；两者各自独立，谁都不以对方为前提。
 
 ```text
 author-persona-skill（能力理解）：语料 → 四层风格能力报告（观察与证据，留在项目外）
-        ↓  按 novel-writer 的 references/style_report_mapping.md 一次落位
+        ↓  可选：按 novel-writer 的 references/style_report_mapping.md 一次落位
 novel-writer（故事创作）：报告能力 → state/author_persona.md 项目专属作家人格
         + state/story_bible.md 设定
         → 故事纲要、正文与连续性维护
 ```
 
-本技能交付**观察与证据**，不替新故事做选择。采用、改写、舍弃哪些能力，由 `novel-writer` 侧依据本书故事承诺在项目人格中裁决；不维护独立转接文件，落位结果直接写进 `author_persona.md` 与 `story_bible.md`。报告原文始终保留在项目外。
+本技能交付**观察与证据**，不替新故事做选择。采用、改写、舍弃哪些能力，由下游侧依据本书故事承诺在项目人格中裁决；不维护独立转接文件。报告原文始终保留在项目外。报告自身的四层结构与 `schema_version "6"` 自洽；下游映射表是否覆盖新增字段，属下游适配问题，不影响本技能产出与发布。
 
-下游仓库：[novel-writer](https://github.com/ouzx6696-cmyk/novel-writer)
+下游仓库（可选）：[novel-writer](https://github.com/ouzx6696-cmyk/novel-writer)
 
 ## 目录导览
 
@@ -140,9 +142,10 @@ novel-writer（故事创作）：报告能力 → state/author_persona.md 项目
 | `SKILL.md` | 技能主文档：职责边界、阶段契约、核心铁律、三步工作流 |
 | `manifest.yaml` | 平台清单：5 个函数的输入输出声明 |
 | `scripts/author_persona_skill/` | 核心实现：corpus / analyzers / distill / report / fidelity / persona |
-| `references/` | 5 份规范：报告 schema、质量基准、技法卡指南、脱敏规则、保真容差 |
+| `references/` | 5 份规范：报告 schema（含 schema 6 字段表）、质量基准（含新指标可靠性分级）、技法卡指南、脱敏规则、保真容差 |
+| `libs/jieba/` | 内嵌分词库（纯 Python，含词典与 posseg），随包分发，无需外部安装 |
 | `assets/templates/report_template_full.md` | 报告骨架（人读参照；运行时真源为 `report/renderer.py`） |
-| `assets/examples/` | 玄幻与历史两类题材的完整报告范例 |
+| `assets/examples/` | 玄幻与历史两类题材的完整报告范例（含附录 A/B/C） |
 | `build_backend.py` | 无依赖的 PEP 517/660 构建后端 |
 
 ## 测试
@@ -151,7 +154,7 @@ novel-writer（故事创作）：报告能力 → state/author_persona.md 项目
 python -m pytest tests/ -q
 ```
 
-166 项用例，覆盖语料处理、定量分析、证据回验、脱敏、渲染、校验、保真与端到端管线。
+覆盖语料处理、定量分析、低层测量、话术建模、跨期矩阵、知识层、分身配套产物、内嵌依赖引导与降级、证据回验、脱敏、渲染、校验、保真与端到端管线。
 
 ## 授权
 

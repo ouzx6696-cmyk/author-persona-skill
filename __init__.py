@@ -30,6 +30,12 @@ if _SUBPKG_DIR not in __path__:
 # 因此不会与半初始化的包 __init__ 形成循环导入。
 from author_persona_skill._version import __version__  # noqa: E402
 
+# 内嵌依赖（jieba）注入 sys.path。本 shim 布局下 skill 根目录就在 _SKILL_DIR，
+# 因此 libs/ 与其同级；_vendor 会按候选清单自动定位，此处只需尽早调用。
+from author_persona_skill._vendor import ensure_libs_on_path as _ensure_libs_on_path  # noqa: E402
+
+_ensure_libs_on_path()
+
 from author_persona_skill._api import *  # noqa: E402,F401,F403
 from author_persona_skill._api import __all__ as _API_EXPORTS  # noqa: E402
 

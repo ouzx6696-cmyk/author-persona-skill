@@ -21,6 +21,7 @@ from author_persona_skill.pipeline import (
 )
 from author_persona_skill.fidelity.fidelity_check import run_fidelity_check
 from author_persona_skill.corpus.file_processor import read_text_file
+from author_persona_skill.persona.scene_templates import SCENE_TYPES
 
 
 def main(argv=None) -> int:
@@ -55,6 +56,8 @@ def main(argv=None) -> int:
     p_finalize.add_argument("--output-dir", default=".", help="输出报告与机器数据目录")
     p_finalize.add_argument("--base-name", help="输出报告基础文件名")
     p_finalize.add_argument("--trial-file", help="可选：试写文本路径，触发保真闭环并写入报告附录")
+    p_finalize.add_argument("--scene-type", choices=list(SCENE_TYPES), default=None,
+                            help="可选：在分身系统提示词末尾追加场景强化指令（战斗/对话/场景/情感/气势/转场）")
     p_finalize.add_argument("--repair-prompt-out",
                             help="可选：校验失败时把修复提示词写入该文件（同一会话内追加即可重试）")
 
@@ -143,6 +146,7 @@ def _main_command(args) -> int:
             output_dir=args.output_dir,
             base_name=args.base_name,
             trial_text=trial_text,
+            scene_type=getattr(args, "scene_type", None),
         )
         # On rejection the repair prompt is the actionable next step; persist it
         # when asked so the retry does not depend on reading stdout.

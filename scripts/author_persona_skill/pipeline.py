@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .analyzers.noise import filter_noise
 from ._version import __version__
 from .analyzers.style_analyzer import StyleAnalyzer
+from .analyzers.cross_era import build_cross_era_matrix
 from .contracts import PREPARE_SCHEMA_VERSION, validate_prepare_result
 from .corpus.file_processor import read_text_file
 from .corpus.chapter_index import build_chapter_index
@@ -55,6 +56,7 @@ from .report.renderer import (
 from .report.validator import validate_report
 from .fidelity.fidelity_check import run_fidelity_check
 from .persona.system_prompt import build_system_prompt
+from .persona.scene_templates import add_scene_enhancement
 
 ERA_ORDER = (
     "开头 (Begin)", "发展 (Develop)", "成熟 (Mature)", "演变 (Evolve)", "结尾 (Ending)",
@@ -302,6 +304,8 @@ def prepare_analysis(
         "era_excerpts": era_excerpts,
         "era_ranges": plan.get("era_ranges", []),
         "era_window_metrics": era_window_metrics,
+        # 跨期对比矩阵 + 演变量趋势，由 era_window_metrics 确定性聚合而来。
+        "cross_era_matrix": build_cross_era_matrix(era_window_metrics),
         "quantitative_features": quant_features,
         "metric_registry": build_metric_registry(quant_features),
         "placeholder_map": build_placeholder_map(quant_features),
@@ -480,6 +484,7 @@ def finalize_analysis(
     output_dir: Optional[str | Path] = None,
     base_name: Optional[str] = None,
     trial_text: Optional[str | List[str]] = None,
+    scene_type: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Stage 3: parse the response, validate it, and render the artifacts.
 
@@ -488,6 +493,10 @@ def finalize_analysis(
     ``trial_text`` additionally runs the fidelity closed loop, whose result is
     appended to the report and returned. The two are independent: a fidelity
     miss keeps the report but sets ``status`` to ``failed``.
+
+    ``scene_type`` (one of battle/dialogue/scene/emotion/momentum/transition)
+    optionally appends a scene-specific writing directive to the generated
+    persona prompt; leaving it unset changes nothing.
     """
     # 0. Stage contract: fail fast and actionably on a stale/incomplete hand-off.
     contract_errors = validate_prepare_result(prepare_result)
@@ -636,6 +645,7 @@ def finalize_analysis(
             report_json=rendered["report_json"],
             allow_author_identity=meta.get("allow_author_identity", False),
         )
+        system_prompt = add_scene_enhancement(system_prompt, scene_type, quant_features)
         if out_dir_path:
             prompt_path = out_dir_path / f"{file_base_name}_system_prompt.txt"
             _atomic_write_text(prompt_path, system_prompt)

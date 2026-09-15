@@ -18,6 +18,7 @@ INCLUDE_ROOTS = (
     "assets",
     "references",
     "scripts",
+    "libs",         # 内嵌 jieba：分词/词性标注是低层测量（实体、世界观词汇、词性比）的前置能力
     "manifest.yaml",
     "SKILL.md",
     "pyproject.toml",

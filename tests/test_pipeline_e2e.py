@@ -81,8 +81,9 @@ class FinalizeHappyPathTest(unittest.TestCase):
         self.assertNotIn("{{avg_sent_len}}", md)
 
     def test_sidecar_schema_and_policy(self):
+        from author_persona_skill.report.renderer import REPORT_SCHEMA_VERSION
         data = json.loads(Path(self.result["report_json_path"]).read_text(encoding="utf-8"))
-        self.assertEqual(data["schema_version"], "5")
+        self.assertEqual(data["schema_version"], REPORT_SCHEMA_VERSION)
         self.assertEqual(data["artifact_policy"], "public_sanitized")
         self.assertEqual(len(data["technique_cards"]), 3)
         self.assertTrue(data["validation_summary"]["publishable"] in {"passed", "failed"})

@@ -1,8 +1,8 @@
 ---
 name: author-persona-skill
-description: 当需要解构小说文风、提取写作技法、生成风格能力报告或制作作家分身系统提示词时使用——用户提到文风分析、文笔诊断、语言风格量化、模仿某位作者的写法时即应触发，无需点名本技能。产出四层报告（第〇部分 作家契约层/定量层/技法调用卡层/思维层，第〇部分由 JSON 的 writer_contract 单一真源渲染）：指标数值一律经占位符注入本地实测值，核心指标与实测冲突即拒绝；技法卡须通过行文机制闸门并逐条证据回验；报告默认全脱敏，只模仿行文机制、不复刻原作内容与专名。输出脱敏人读 Markdown 与机器读 report.json（schema_version "5"），可经 novel-writer 按转译映射表一次落位为项目人格与设定。本技能只负责理解与报告，不负责新故事的剧情设计、类型定位与技法调用决策。面向中文小说语料，纯标准库实现。
+description: 当需要解构小说文风、提取写作技法、生成风格能力报告或制作作家分身系统提示词时使用——用户提到文风分析、文笔诊断、语言风格量化、模仿某位作者的写法时即应触发，无需点名本技能。产出四层报告（第〇部分 作家契约层/定量层/技法调用卡层/思维层，第〇部分由 JSON 的 writer_contract 单一真源渲染）：指标数值一律经占位符注入本地实测值，核心指标与实测冲突即拒绝；技法卡须通过行文机制闸门并逐条证据回验；报告默认全脱敏，只模仿行文机制、不复刻原作内容与专名。输出脱敏人读 Markdown 与机器读 report.json（schema_version "6"），产物自足，可单独使用或供下游创作侧技能按各自映射表落位。本技能独立运行，只负责理解与报告，不负责新故事的剧情设计、类型定位与技法调用决策。面向中文小说语料，内嵌 jieba 分词库（纯 Python，无需外部安装）。
 metadata:
-  version: "10.2.0"
+  version: "11.0.0"
   author: 专家级作者系统团队
   category: 内容创作
 ---
@@ -11,7 +11,7 @@ metadata:
 
 > 一句话：把一部小说读成一份**可迁移的行文机制说明书**，并用实测数值把它钉死。
 
-> 本技能注册名为 `author-persona-skill`，代码包与目录名为 `author_persona_skill`，同指本技能；报告 schema 为 `schema_version "5"`。
+> 本技能注册名为 `author-persona-skill`，代码包与目录名为 `author_persona_skill`，同指本技能；报告 schema 为 `schema_version "6"`。
 
 ## 我负责什么
 
@@ -26,11 +26,11 @@ metadata:
 
 ## 最终输出
 
-符合 `novel-writer` 契约的四层风格能力报告：脱敏人读 Markdown + 机器读 `report.json` sidecar（`schema_version "5"`）。四层为：第〇部分 作家定义与读者契约（作家契约层）/ 第一部分 定量风格分析 / 第二部分 核心写作技法（技法调用卡）/ 第三部分 作家创作思维与宏观心智。可另生成独立的作家分身系统提示词。全程仅依赖 Python 标准库。
+本技能自有的四层风格能力报告契约（不依赖任何其他技能即可产出与使用）：脱敏人读 Markdown + 机器读 `report.json` sidecar（`schema_version "6"`）。四层为：第〇部分 作家定义与读者契约（作家契约层）/ 第一部分 定量风格分析 / 第二部分 核心写作技法（技法调用卡）/ 第三部分 作家创作思维与宏观心智；四层之后另附附录 A 跨期对比矩阵 / B 定量扩展 / C 分身配套产物（附录追加在四层之后，不改变四层标题）。可另生成独立的作家分身系统提示词。可选参数 `scene_type` 追加六类场景强化指令。分词依赖内嵌于 `libs/`（纯 Python jieba），无需外部安装；缺失时自动降级为正则近似并标注弱信号。
 
 ## 什么时候用我
 
-用户提到文风分析、文笔诊断、语言风格量化、想模仿某位作者的写法时触发。典型入口是 `novel-writer` 新项目的第一步：先理解一种写法，再做能力落位（见文末「与 novel-writer 的协作关系」）。
+用户提到文风分析、文笔诊断、语言风格量化、想模仿某位作者的写法时触发。本技能**独立运行**：输入一份语料，产出报告与分身提示词，全过程不依赖其他技能，产物自足可读。若下游另有创作侧技能（如 `novel-writer`）需要消费本报告，属**可选的一次性互操作**，不构成本技能的运行或发布前提（见文末「与 novel-writer 的协作关系」）。
 
 ---
 
@@ -70,9 +70,19 @@ metadata:
 | 必返 | `prepare_meta` | 采样区间、噪音比、开关快照、`prepare_schema_version` |
 | 选返 | `era_excerpts` / `era_ranges` / `era_id_map` | 跨期对照原文与时期索引 |
 | 选返 | `era_window_metrics` | 每时期窗口指标 → 保真闭环的动态容差带 |
+| 选返 | `cross_era_matrix` | 6 维跨期对比矩阵 + 每维趋势判定 → 报告附录 A |
 | 选返 | `chunk_offsets` / `evidence_pool` | 偏移索引与候选证据池 |
 
-契约版本为 `prepare_schema_version: "1"`；手工拼装 `prepare_result` 时用 `describe_prepare_contract()` 查最新字段表，用 `validate_prepare_result(prep)` 先自检。
+契约版本为 `prepare_schema_version: "1"`——**schema 6 未升 prepare 版本**：新增字段（`cross_era_matrix`、低层测量层、知识层）全部走可选键，缺失时 finalize 自动降级，旧 `prep.json` 仍可继续 finalize。手工拼装 `prepare_result` 时用 `describe_prepare_contract()` 查最新字段表，用 `validate_prepare_result(prep)` 先自检。
+
+`quantitative_features` 内新增的三个数据块（均为选返，缺失即降级）：
+
+| 数据块 | 内容 | 用途 |
+|---|---|---|
+| `low_level_features` | 可读性四式、TTR/hapax、分句复杂度、情感、词长、词性、命名实体 | 报告附录 B.1–B.3，占位符 `{{ttr}}` 等 M080–M099 |
+| `worldview_vocab` | 世界观五类词汇（核心角色/核心设定/力量体系/组织势力/地域场景）+ 系统流关键词 | 附录 B.4；词汇表为原始专名，只进私有通道，公开侧仅列条数 |
+| `knowledge_layer` | 8 条维度间关联规则、13 类风格 DNA 候选 + 3 兜底、10 条通用禁用词 | 附录 B.6 与提示词知识菜单；一律标 `authoritative: false` |
+| `semantic_dimensions` | POV 稳定性等启发式子维度（对话功能分布位于 `dialogue_features.dialogue_functions`） | 附录 B.5 |
 
 ## 🚨 核心铁律
 
@@ -119,7 +129,7 @@ Step 2 只需要两个返回字段：
 
 1. **先深读再动笔**：通读 Prompt 中的质量基准、五时期代表片段与锚点池，跨期对比是归纳的前提。
 2. **第〇部分只写标题行**：作家契约（positioning / purpose / style_marks_synthesis / enemy_clauses 四字段，enemy_clauses 2–4 条）全部写入 JSON 的 `writer_contract`，只能从本次语料合成，禁止调用模型记忆；Markdown 里只输出"## 第〇部分：作家定义与读者契约（作家契约层）"标题行。
-3. **第一部分只写诊断**：11 个小节按"命名型总起句 + 因果诊断段"展开，1.1–1.8 节指标数值一律用占位符（如 `平均句长 {{avg_sent_len}} 字`），1.9–1.11 为定性小节。
+3. **第一部分只写诊断**：11 个小节按"命名型总起句 + 因果诊断段"展开，1.1–1.8 节指标数值一律用占位符（如 `平均句长 {{avg_sent_len}} 字`），1.9–1.11 为定性小节。1.9 的角色口吻必须锚定实测话术（`tone_type` / 平均台词长度 / 口癖 / 起句习惯），角色一律以原型标签指称，不得出现原名。
 4. **第二部分只写机制**：技法卡内容全部写入 JSON 机器块（名称、定义、步骤落在行文层；`serves_purpose` 必填；失效边界写齐"禁用场景+退化成因+规避动作"；`evidence[].metric` 必须标注指标名并附注解）；Markdown 里只输出第二部分标题行，正文由 JSON 渲染；至少一张卡给出跨时期双锚点证据（按卡校验）。
 5. **第三部分只写 JSON**：6 个思维维度 + 题材适配边界全部写入 `thinking_layer`（Markdown 只输出标题行）；长线布局须引用 ≥2 组不同时期锚点（写成 `[c001]` 锚点 ID 形式，校验器按此统计跨期性）。
 6. **末尾附 JSON 数据块**：`desensitization_map` 只映射候选池实际给出的条目（通常 ≤10 项），替换标签用 2–4 字中性原型词；候选池之外的额外键仅记入 `validation.warnings`（不阻断，见 `references/desensitization.md`）。
@@ -185,7 +195,7 @@ result = finalize_analysis(
 
 #### 产出物
 
-- `report_path` / `report_json_path`：正式 Markdown 与机器读 sidecar（`passed` 时）；第〇/二/三部分由 JSON 单一真源渲染，sidecar 的 `schema_version` 为 `"5"`，携带 `provenance`、`validation_summary`（含 `quality` 质量自评）、`fidelity` 与 `artifact_policy`。
+- `report_path` / `report_json_path`：正式 Markdown 与机器读 sidecar（`passed` 时）；第〇/二/三部分由 JSON 单一真源渲染，正文之后追加附录 A/B/C（跨期矩阵、定量扩展、分身配套）；sidecar 的 `schema_version` 为 `"6"`，携带 `provenance`、`validation_summary`（含 `quality` 质量自评）、`fidelity` 与 `artifact_policy`，并新增 `voiceprint` / `cross_era_matrix` / `deployment_config` / `style_templates` 四个字段。
 - `desensitization_map_path` / `manifest_path`：按报告名作用域落盘的 `{base_name}_desensitization_map.json` 与 `{base_name}_manifest.json`（同目录多次 finalize 互不覆盖；映射表仅含中性标签，原键映射只进私有 sidecar）。
 - `fidelity`：传入 `trial_text` 时的保真闭环结果（同时写入报告附录）。
 - `system_prompt`：`generate_system_prompt=True` 时生成的分身系统提示词（含实测数值铁律与合成正反示范）。
@@ -202,7 +212,7 @@ python -m author_persona_skill prepare 小说.txt --author 作者名 --title 作
     --output-prompt prompt.txt --output-json prep.json            # Step 1
 python -m author_persona_skill finalize --prepare-json prep.json --response-file response.txt \
     --output-dir ./output [--base-name 报告名] [--trial-file 试写.txt] \
-    [--repair-prompt-out 修复.txt]                                 # Step 3；校验失败生成 *_rejected.md
+    [--scene-type battle] [--repair-prompt-out 修复.txt]             # Step 3；校验失败生成 *_rejected.md
 python -m author_persona_skill fidelity --trial 试写.txt --report-json ./output/报告.json  # 独立保真校验
 ```
 
@@ -210,13 +220,13 @@ python -m author_persona_skill fidelity --trial 试写.txt --report-json ./outpu
 
 试写用单独一行 `---`（或 `===`）分隔场景，须为 2–3 个全新场景、每个 ≥800 字，覆盖日常互动（常态呼吸）、高压冲突（短句脉冲与动作心理比）、关键抉择（思维层复现）；类型标注可写在场景开头或 `# 场景N：冲突` 标题分隔行（两种写法均生效），标注类型（日常/冲突/抉择）时三类必须齐全。场景强制与复制检测在 finalize 与独立调用两条路径中同源（`run_fidelity_check` 单点执行，以报告 `quantitative_features` 为基准；无参照文本时复制检测跳过并如实提示）。容差默认值之外，prepare 产出的 `era_window_metrics` 会推导出**作者自然波动区间**（中位数 ± k·MAD），试写值落在区间内即视为达标并标注 `basis: author_band`。详见 `references/fidelity.md`。
 
-## 🔗 与 novel-writer 的协作关系
+## 🔗 与 novel-writer 的协作关系（可选互操作）
 
-两个技能构成一套创作系统的先后两环：
+两个技能**各自独立运行**，谁都不以对方为前提。若两者同处一套创作流程，可按下图衔接；本技能单独使用时，跳过本节即可，报告与分身提示词照样完整可用。
 
 ```text
 本技能（能力理解）：语料 → 四层风格能力报告（观察与证据，留在项目外）
-        ↓  由虚拟作家人工通读，按 novel-writer 的 references/style_report_mapping.md 一次落位
+        ↓  可选：由虚拟作家人工通读，按 novel-writer 的 references/style_report_mapping.md 一次落位
 novel-writer（故事创作）：报告能力 → state/author_persona.md 项目专属作家人格（日常唯一人格输入）
         + state/story_bible.md 设定
         → 故事纲要、正文与连续性维护
@@ -224,9 +234,9 @@ novel-writer（故事创作）：报告能力 → state/author_persona.md 项目
 
 职责边界：
 
-- 本技能交付**观察与证据**，不替新故事做选择——采用、改写、舍弃哪些能力，由 `novel-writer` 侧依据本书故事承诺在项目人格中裁决；**不维护独立转接文件**，落位结果直接写进 `author_persona.md` 与 `story_bible.md`；
-- 转译由 `novel-writer` 的虚拟作家人工完成，逐项按 `references/style_report_mapping.md` 的映射表落位；报告路径登记在项目 `state/memory.md` 的「五、风格报告」（两技能同仓时按相对路径引用，跨仓使用时以目标项目版本为准），本技能不参与项目人格生成与技法调用决策；
-- 报告原文始终保留在项目外；`novel-writer` 的转译映射表只覆盖现行四层报告（`schema_version "5"`）。
+- 本技能交付**观察与证据**，不替新故事做选择——采用、改写、舍弃哪些能力，由下游侧依据本书故事承诺在项目人格中裁决；**不维护独立转接文件**；
+- 若下游消费本报告，转译由下游的虚拟作家人工完成，逐项按其映射表落位；本技能不参与项目人格生成与技法调用决策；
+- 报告原文始终保留在项目外；本技能只保证报告自身的四层结构与 `schema_version "6"` 自洽，**不对任何下游读取方的版本节奏负责**。schema 6 新增的 `voiceprint` / `cross_era_matrix` / `deployment_config` / `style_templates` 与附录 A/B/C 都是本报告自足的组成部分；下游映射表是否覆盖它们，属下游的适配问题，不影响本技能的产出与发布。报告向后兼容（四层标题与旧字段语义未变），旧映射仍可处理四层正文。
 
 衔接示例：
 
@@ -241,8 +251,8 @@ python novel-writer/scripts/init_project.py /path/to/my_novel
 
 ## 📚 目录导览
 
-- `references/report-schema.md`：四层契约字段规范（含占位符契约与 writer_contract 契约）
-- `references/quality-baseline.md`：报告质量基准（因果诊断/失效边界/跨期证据/量化禁令，验收参照系）
+- `references/report-schema.md`：四层契约字段规范（含占位符契约、writer_contract 契约与 schema 6 字段表）
+- `references/quality-baseline.md`：报告质量基准（因果诊断/失效边界/跨期证据/量化禁令/新指标可靠性分级，验收参照系）
 - `references/technique-card-guide.md`：技法卡编写指南（好卡/坏卡对照）
 - `references/desensitization.md`：三层脱敏与反向校验规则（指 L1/L2/L3 脱敏层，非报告层数）
 - `references/fidelity.md`：保真闭环容差表与动态波动区间

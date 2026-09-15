@@ -1,6 +1,6 @@
 # 风格能力报告字段与契约规范
 
-风格能力报告由**人读 Markdown 报告**与**机器读 JSON sidecar (`report.json`)** 双通道组成。报告为四层：第〇部分（作家契约层，`writer_contract`）+ 三部分；`report.json` 的 `schema_version` 为 `"5"`。
+风格能力报告由**人读 Markdown 报告**与**机器读 JSON sidecar (`report.json`)** 双通道组成。报告为四层：第〇部分（作家契约层，`writer_contract`）+ 三部分；`report.json` 的 `schema_version "6"`（由 `renderer.REPORT_SCHEMA_VERSION` 单一真源给出）。
 
 报告头部的「报告契约」由渲染器统一注入（`四层契约 · 脱敏 · 证据锚点 · 保真闭环`）；范例中的契约行与最终产物形态一致。
 
@@ -21,9 +21,26 @@
 | `{{third_person_count}}` / `{{first_person_count}}` | 人称代词计数 |
 | `{{action_count}}` / `{{mental_count}}` / `{{env_count}}` | 描写主导句计数 |
 
+低层测量层（M080–M099，schema 6 新增）另提供一组占位符：
+
+| 占位符（示例） | 含义 | 数据源可靠性 |
+|---|---|---|
+| `{{readability_level}}` | 可读性三因子分级（简单/中等/较难/困难） | 启发式 |
+| `{{yang_chengshu_index}}` / `{{gunning_fog_index}}` | 杨承淑指数 / Gunning-Fog | 启发式 |
+| `{{flesch_kincaid_grade}}` / `{{smog_index}}` | FK 年级 / SMOG | 启发式 |
+| `{{avg_sentence_length_chars}}` / `{{avg_word_length_chars}}` | 平均句长（字）/ 平均词长（字），四式的复算输入 | 直接 |
+| `{{complex_word_ratio}}` | 复杂词比（`len>=4` 词 / 总词） | 直接 |
+| `{{ttr}}` / `{{ttr_filtered}}` / `{{hapax_ratio}}` | 词汇丰富度三式 | 直接 |
+| `{{avg_clauses_per_sentence}}` / `{{subordinate_ratio}}` / `{{coordinate_ratio}}` | 分句复杂度 | 直接 |
+| `{{sentiment_balance}}` | 情感平衡值 `(正-负)/匹配总数` | 弱信号 |
+| `{{entity_density}}` | 命名实体密度 | 弱信号 |
+| `{{verb_ratio}}` / `{{adjective_ratio}}` | 动词/形容词占比（分母为实词总数，四项之和为 1） | 直接 |
+
 完整注册表由 `llm_prompt` 中的"数值占位符注册表"给出。渲染时统一替换为实测值；
 校验器随后审计全文：**8 个核心指标**（平均句长/段长、对话占比、短句率/长句率、比喻密度、逗句比、动作心理比）
 与实测冲突将拒绝整份报告；其余次要指标冲突仅降级为 `validation.warnings` 提示。
+**schema 6 新增的全部指标（M080–M099）均为 warning 级**，不在 `CORE_AUDIT_TOKENS` 内——
+核心 8 项保持稳定，避免下游预期漂移。
 
 ---
 
@@ -117,7 +134,8 @@ Markdown 里只输出「## 第〇部分：作家定义与读者契约（作家�
 
 `report.json` 默认使用 `artifact_policy: "public_sanitized"`：
 
-- `quantitative_features` 递归移除 `sample_quotes`、`merged_aliases`、`excerpt` 等原文或声纹轨迹字段；**高/低置信说话人名单（原始人名轨迹）一律不进入公开 JSON**（原型化口吻仅在 1.9 散文与 `dialogue_review` 呈现）。
+- `quantitative_features` 递归移除 `sample_quotes`、`merged_aliases`、`raw_quote`、`raw_text`、`excerpt` 等原文或声纹轨迹字段；**高/低置信说话人名单（原始人名轨迹）一律不进入公开 JSON**（原型化口吻仅在 1.9 散文、`dialogue_review` 与脱敏后的 `voiceprint` 呈现，`voiceprint` 的键是原型标签，不是人名）；
+- `unique_tags`（「哪个角色独占哪个标签」）与低层测量层的命名实体样例（`sample_persons` / `sample_places` / `sample_orgs`）、世界观词汇表（`term_counts`）同为身份轨迹，一并剔除；公开侧只保留计数与密度；
 - 技法卡保留 `chunk_id`、`metric`、`note`、`era`、`verification_status`，但 `quote` 输出为“已校验证据（内容已隐藏）”；
 - Markdown 的证据引文只保留锚点和验证占位文本，行尾说明仍执行脱敏；
 - 公开 `desensitization_map` 使用中性候选编号，不暴露原始映射键；
@@ -140,6 +158,46 @@ Markdown 里只输出「## 第〇部分：作家定义与读者契约（作家�
 引文回验契约为「规范化包含命中（最短 6 字，上限 80 字）」：引文经空白/引号/破折号归一后须在语料中整体命中（模块常量 `MIN_QUOTE_CHARS = 6` 可回调）；短于 6 字的片段一律降级，不得充当已验证锚点。
 
 `technique_cards[].evidence[].era` 由校验器按语料实测重推导（引文在采样文本中的精确偏移 → 时期区间），LLM 自报时期仅在偏离时提示后覆盖；跨期证据按卡校验——至少一张卡自身拥有两个不同时期的严格命中证据。
+
+---
+
+## 3.5 schema 6 根级字段表
+
+`report.json` 的根级字段与产物策略无关（`artifact_policy` 决定内容是否脱敏，不决定字段是否存在）：
+
+| 字段 | 类型 | 来源 | 说明 |
+|---|---|---|---|
+| `version` | string | 渲染器包版本 | 与 `pyproject` / `manifest.yaml` / `SKILL.md` 一致 |
+| `schema_version` | string | `REPORT_SCHEMA_VERSION` | 当前为 `"6"`；单一常量，三处输出共用 |
+| `artifact_policy` | string | 调用参数 | `public_sanitized` / `raw` |
+| `meta` | object | prepare_meta | 默认只含 `work_id`；真名/真标题仅在 `allow_author_identity` 或 raw 模式出现 |
+| `writer_contract` | object | LLM JSON | 第〇部分单一真源；四字段必填 |
+| `quantitative_features` | object | prepare 实测 | 递归剔除原文与身份轨迹字段后的定量数据 |
+| `voiceprint` | object | 由 `dialogue_features` 派生 | **schema 6 新增**。原型标签 → `{tone_type, avg_speech_len, common_tags, opening_words, catchphrases}`；短语过映射后仍被判含专名者丢弃，原始说话人名单不进公开产物 |
+| `cross_era_matrix` | object | 由 `era_window_metrics` 聚合 | **schema 6 新增**。`{eras, dimensions[{dimension, unit, values, mean, trend}], era_count}` |
+| `deployment_config` | object | 由实测特征派生 | **schema 6 新增**。`{platforms{dify/coze/solo/chatgpt/claude}, config_note, derived_from}` |
+| `style_templates` | object | 由公开侧数据渲染 | **schema 6 新增**。键为 `identification` / `transfer` / `dialogue_generation` |
+| `technique_cards` | array | LLM JSON | 3–6 张；`quote` 输出为证据占位符 |
+| `thinking_layer` | object | LLM JSON | 第三部分单一真源；七维 |
+| `claims` | array | LLM JSON（可选） | 仅在响应携带时校验与透出 |
+| `desensitization_map` | object | 渲染器 | 中性候选编号 → 替换标签 |
+| `dialogue_review` | object | LLM JSON | 角色原型化口吻复核；≥2 名实测角色时校验闸门要求非空 |
+| `provenance` | object | 渲染器 | 采样标记、覆盖率、时期数、占位符注册表与指标注册表快照 |
+| `validation_summary` | object | 渲染器 | 四重校验 + 渲染终检 + quality 自评 + warnings（warnings 已脱敏） |
+| `fidelity` | object / null | 保真闭环 | 传入 `trial_text` 时非空 |
+| `artifact_diagnostics` | object | 渲染器 | 映射错误/警告计数 |
+
+对应的 Markdown 侧新增三个附录（四层标题不变，附录一律排在四层之后）：
+
+| 附录 | 内容 | 字段来源 |
+|---|---|---|
+| 附录 A：跨期对比矩阵（实测演变量） | 6 维矩阵 + 每维趋势 | `cross_era_matrix` |
+| 附录 B：定量扩展（低层测量层与知识候选） | B.1 可读性与词汇丰富度 / B.2 句法复杂度与情感 / B.3 词长与词性分布 / B.4 世界观词汇与特色系统 / B.5 语义子维度 / B.6 维度间关联与风格候选 | `quantitative_features.low_level_features`、`worldview_vocab`、`semantic_dimensions`、`knowledge_layer`（均为公开侧数据） |
+| 附录 C：分身配套产物 | C.1 平台部署配置 / C.2 三套风格模板摘要 | `deployment_config`、`style_templates` |
+
+附录 B.4/B.6 只输出条数与候选标签，**不引用**命名实体样例与世界观词汇本体——那些是原始专名，读取方式本身即防线（见 `renderer._render_quant_extension_appendix`）。
+
+---
 
 ## 4. 第三部分：作家创作思维与宏观心智（思维层）
 

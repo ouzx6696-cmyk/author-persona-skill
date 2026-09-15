@@ -50,8 +50,8 @@ MAX_CARDS = 6
 MIN_EVIDENCE = 2
 
 #: Top-level JSON keys the machine block may carry. Unknown roots are rejected:
-#: the block is an API contract consumed by novel-writer, so silently ignoring
-#: stray fields would let a malformed response look valid.
+#: the block is a public API contract, so silently ignoring stray fields would
+#: let a malformed response look valid.
 ALLOWED_ROOT_KEYS = frozenset({
     "writer_contract", "technique_cards", "thinking_layer",
     "desensitization_map", "dialogue_review", "claims",
@@ -98,6 +98,8 @@ def validate_report(
         schema_passed = _check_thinking_layer(parsed_json, errors) and schema_passed
         schema_passed = _check_claims(parsed_json, prepare_result, errors, warnings) and schema_passed
         schema_passed = _check_writer_contract(parsed_json, errors) and schema_passed
+        schema_passed = _check_dialogue_review(
+            parsed_json, prepare_result, errors, warnings) and schema_passed
 
         for key in list(parsed_json.keys()):
             if key not in ALLOWED_ROOT_KEYS:
@@ -286,6 +288,88 @@ def _check_writer_contract(parsed_json: Dict[str, Any], errors: List[str]) -> bo
         errors.extend(contract_errors)
     return ok
 
+
+#: 语料实测到多少个高置信说话人以上时，就要求 dialogue_review 至少确认一个原型。
+#: 单人语料（一个说话人）不强制：那更像集中式对白，不该逼模型编出第二个人格。
+_DIALOGUE_REVIEW_MIN_SPEAKERS = 2
+
+
+def _check_dialogue_review(
+    parsed_json: Dict[str, Any],
+    prepare_result: Dict[str, Any],
+    errors: List[str],
+    warnings: List[str],
+) -> bool:
+    """Gate the 1.9 角色话术复盘块.
+
+    该槽位此前只有契约没有校验：模型可以给出口吻结论却不对应任何实测说话人，
+    也可以把角色名当 role 写回来（绕过脱敏）。三道检查——角色数、tone 非空、
+    标签可解析——正是为了堵这两个口子。
+    """
+    review = parsed_json.get("dialogue_review")
+    if not isinstance(review, dict):
+        errors.append("JSON 缺少 dialogue_review（1.9 角色话术复盘），无法核对原型口吻的实测来源。")
+        return False
+
+    profiles = review.get("confirmed_profiles")
+    discarded = review.get("discarded_candidates")
+    if not isinstance(profiles, list):
+        errors.append("dialogue_review.confirmed_profiles 必须是列表。")
+        return False
+    if discarded is not None and not isinstance(discarded, list):
+        errors.append("dialogue_review.discarded_candidates 必须是列表。")
+        return False
+
+    measured = (prepare_result.get("quantitative_features", {}) or {}).get(
+        "dialogue_features", {}).get("high_confidence_speakers", [])
+    measured_count = len(measured) if isinstance(measured, list) else 0
+
+    # 可解析标签 = 公开映射的替换值。_build_public_mapping 是渲染公开产物时的同
+    # 一个函数，复用它才能保证「校验通过的标签」就是「渲染后会出现的标签」。
+    from .renderer import _build_public_mapping
+    desens_map = parsed_json.get("desensitization_map", {})
+    public_mapping, _map_errors, _map_warnings = _build_public_mapping(
+        desens_map, prepare_result.get("proper_noun_candidates", []) or [])
+    valid_labels = set(public_mapping.values())
+
+    ok = True
+    seen_roles: List[str] = []
+    for idx, profile in enumerate(profiles):
+        if not isinstance(profile, dict):
+            errors.append(f"dialogue_review.confirmed_profiles[{idx}] 必须是对象。")
+            ok = False
+            continue
+        role = str(profile.get("role", "")).strip()
+        tone = str(profile.get("tone", "")).strip()
+        sample_tag = str(profile.get("sample_tag", "")).strip()
+        if len(role) < 2:
+            errors.append(f"dialogue_review.confirmed_profiles[{idx}].role 缺失或过短，无法定位原型。")
+            ok = False
+        elif valid_labels and role not in valid_labels:
+            errors.append(
+                f"dialogue_review.confirmed_profiles[{idx}].role「{role}」不是脱敏映射给出的原型标签，"
+                "禁止使用映射之外的名字（硬约束清单 #6）。")
+            ok = False
+        if len(tone) < 2:
+            errors.append(f"dialogue_review.confirmed_profiles[{idx}].tone 不能为空：口吻结论必须写明。")
+            ok = False
+        if not sample_tag:
+            errors.append(f"dialogue_review.confirmed_profiles[{idx}].sample_tag 不能为空。")
+            ok = False
+        if role and role in seen_roles:
+            warnings.append(f"dialogue_review 中原型「{role}」重复确认，已按首条为准。")
+        elif role:
+            seen_roles.append(role)
+
+    if not profiles and measured_count >= _DIALOGUE_REVIEW_MIN_SPEAKERS:
+        errors.append(
+            f"语料实测有 {measured_count} 名高置信说话人，但 dialogue_review.confirmed_profiles 为空："
+            "角色话术必须由实测支撑，不允许留空（1.9 节将无锚点）。")
+        ok = False
+    elif profiles and measured_count and len(profiles) > measured_count:
+        warnings.append(
+            f"dialogue_review 确认了 {len(profiles)} 个原型，超过实测高置信说话人 {measured_count} 名。")
+    return ok
 
 # ---------------------------------------------------------------------------
 # Evidence gate

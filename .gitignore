@@ -12,3 +12,6 @@ build/
 dist/
 *.egg-info/
 *.whl
+.zcode/
+.ruff_cache/
+.mypy_cache/

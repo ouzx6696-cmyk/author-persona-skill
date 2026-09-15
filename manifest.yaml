@@ -1,6 +1,6 @@
 name: "author-persona-skill"
-version: "10.2.0"
-description: "当需要解构小说文风、提取写作技法、生成风格能力报告或制作作家分身系统提示词时使用——用户提到文风分析、文笔诊断、语言风格量化、模仿某位作者的写法时即应触发，无需点名本技能。产出四层报告（第〇部分 作家契约层/定量层/技法调用卡层/思维层，第〇部分由 JSON 的 writer_contract 单一真源渲染）：指标数值一律经占位符注入本地实测值，核心指标与实测冲突即拒绝；技法卡须通过行文机制闸门并逐条证据回验；报告默认全脱敏，只模仿行文机制、不复刻原作内容与专名。输出脱敏人读 Markdown 与机器读 report.json（schema_version \"5\"），可经 novel-writer 按转译映射表一次落位为项目人格与设定。本技能只负责理解与报告，不负责新故事的剧情设计、类型定位与技法调用决策。面向中文小说语料，纯标准库实现。"
+version: "11.0.0"
+description: "当需要解构小说文风、提取写作技法、生成风格能力报告或制作作家分身系统提示词时使用——用户提到文风分析、文笔诊断、语言风格量化、模仿某位作者的写法时即应触发，无需点名本技能。产出四层报告（第〇部分 作家契约层/定量层/技法调用卡层/思维层，第〇部分由 JSON 的 writer_contract 单一真源渲染）：指标数值一律经占位符注入本地实测值，核心指标与实测冲突即拒绝；技法卡须通过行文机制闸门并逐条证据回验；报告默认全脱敏，只模仿行文机制、不复刻原作内容与专名。输出脱敏人读 Markdown 与机器读 report.json（schema_version \"6\"），产物自足，可单独使用或供下游创作侧技能按各自映射表落位。本技能独立运行，只负责理解与报告，不负责新故事的剧情设计、类型定位与技法调用决策。面向中文小说语料，内嵌 jieba 分词库（纯 Python，无需外部安装）。"
 author: "专家级作者系统团队"
 category: "内容创作"
 
@@ -73,6 +73,9 @@ functions:
       - name: "era_window_metrics"
         type: "array"
         description: "每时期窗口的 StyleAnalyzer 输出，供 finalize 推导作者自然波动区间（中位数±k·MAD）"
+      - name: "cross_era_matrix"
+        type: "object"
+        description: "由 era_window_metrics 确定性聚合的 6 维跨期对比矩阵（平均句长/短句率/长句率/平均段长/对话占比/词汇丰富度），每维附均值与趋势判定（上升/下降/波动/稳定/数据不足）。报告附录 A 与 report.json 的 cross_era_matrix 由此渲染"
       - name: "prepare_meta"
         type: "object"
         description: "采样区间、噪音过滤比例等元信息（含 prepare_schema_version，finalize 据此校验阶段契约）"
@@ -100,13 +103,17 @@ functions:
         type: "string"
         description: "可选试写文本；传入即触发保真闭环并写入报告附录"
         required: false
+      - name: "scene_type"
+        type: "string"
+        description: "可选场景类型（battle/dialogue/scene/emotion/momentum/transition）；给出且 generate_system_prompt=true 时，向分身提示词追加该场景的强化指令。缺省或取值非法时不改变现有行为"
+        required: false
     outputs:
       - name: "report_content"
         type: "string"
-        description: "四部分完整 Markdown 报告（第〇部分作家契约层 + 定量层 + 技法调用卡层 + 思维层）"
+        description: "四部分完整 Markdown 报告（第〇部分作家契约层 + 定量层 + 技法调用卡层 + 思维层），其后追加附录 A 跨期对比矩阵 / B 定量扩展 / C 分身配套产物"
       - name: "report_json"
         type: "object"
-        description: "机器读 report.json 数据副本；默认 artifact_policy=public_sanitized，原始证据仅在显式 include_raw_evidence 时进入私有 sidecar"
+        description: "机器读 report.json 数据副本（schema_version \"6\"，含 voiceprint / cross_era_matrix / deployment_config / style_templates）；默认 artifact_policy=public_sanitized，原始证据仅在显式 include_raw_evidence 时进入私有 sidecar"
       - name: "report_path"
         type: "string"
         description: "Markdown 报告文件保存路径"
@@ -170,7 +177,7 @@ functions:
         description: "噪音占比百分比字符串"
 
   - name: "analyze_style"
-    description: "纯定量 11 类风格指标（句法/段落/对话/标点/修辞/视角/描写等）与场景切换密度测量。直接返回扁平定量 dict（含 text_summary/sentence_structure/dialogue_features/style_markers 等键），无 features 包裹层。"
+    description: "纯定量风格指标测量（句法/段落/对话/标点/修辞/视角/描写/意象/风格标记/低层/知识/世界观/语义共 15 个数据块）与场景切换密度测量。直接返回扁平定量 dict（含 text_summary/sentence_structure/dialogue_features/low_level_features/knowledge_layer/semantic_dimensions/style_markers 等键），无 features 包裹层。"
     inputs:
       - name: "text"
         type: "string"
@@ -186,6 +193,18 @@ functions:
       - name: "dialogue_features"
         type: "object"
         description: "对话占比/道说比等对话特征"
+      - name: "low_level_features"
+        type: "object"
+        description: "低层测量层：可读性四式（杨承淑/FK/Gunning-Fog/SMOG）/词汇丰富度（TTR/hapax）/分句复杂度/情感/词长/词性/命名实体；缺分词器时整块标注 degraded"
+      - name: "worldview_vocab"
+        type: "object"
+        description: "世界观五类词汇分类（核心角色/核心设定/力量体系/组织势力/地域场景）与系统流关键词命中；词汇表为原始专名，仅私有通道可见"
+      - name: "knowledge_layer"
+        type: "object"
+        description: "维度间关联信号、风格 DNA 候选（authoritative=false）、通用禁用词表；属提示词知识菜单，非分析器结论"
+      - name: "semantic_dimensions"
+        type: "object"
+        description: "POV 稳定性等启发式语义子维度（对话功能分布位于 dialogue_features.dialogue_functions）"
       - name: "style_markers"
         type: "array"
         description: "核心风格标记列表（另含修辞/视角/描写等定量键，详见 StyleAnalyzer.analyze 返回）"
@@ -230,4 +249,4 @@ core_constraint: |
   - 第一部分数值只经占位符注入，手写数字与实测不符即整份拒绝
   - 报告第〇/二/三部分由 JSON 机器块单一真源渲染（writer_contract/technique_cards/thinking_layer），Markdown 与 report.json 不允许出现两套内容
   - 跨期证据按卡校验，证据时期由语料实测重推导，不信任 LLM 自报值
-  - 产出机器副本供 novel-writer 直接加载使用
+  - 产出机器副本（report.json）供下游创作侧技能按需加载；本技能独立运行，不依赖对方

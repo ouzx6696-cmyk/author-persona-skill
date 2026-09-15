@@ -76,8 +76,14 @@ def prepared(
     budget: int = 30000,
     options: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """prepare_analysis on the synthetic corpus, memoised per (key, options)."""
-    cache_key = f"{key}|{chapters}|{author}|{title}|{budget}|{sorted((options or {}).items())}"
+    """prepare_analysis on the synthetic corpus, memoised per *inputs*.
+
+    The cache key is the real corpus configuration, not the caller's label: the
+    low-level layer tokenizes the whole corpus with jieba, and keying on a free-form
+    label made every ``key="xxx"`` call re-run the full pipeline on an identical
+    corpus (nine times in the current suite).
+    """
+    cache_key = f"{chapters}|{author}|{title}|{budget}|{sorted((options or {}).items())}"
     if cache_key not in _PREPARE_CACHE:
         opts = {"sample_budget_chars": budget}
         opts.update(options or {})
@@ -237,7 +243,17 @@ def valid_response(prep: Dict[str, Any]) -> str:
             "adaptation_boundary": "适合快节奏冒险与危机推进题材，不适合慢热日常与细腻心理独白。",
         },
         "desensitization_map": _archetype_map(prep),
-        "dialogue_review": {"confirmed_profiles": [], "discarded_candidates": []},
+        # 角色话术复盘必须由实测说话人支撑：语料的高置信角色各确认一个原型。
+        # role 只允许用映射给出的原型标签，不能回填原角色名。
+        "dialogue_review": {
+            "confirmed_profiles": [
+                {"role": "原型丙", "tone": "陈述型，起句多用「当真」「且慢」",
+                 "sample_tag": "道"},
+                {"role": "原型丁", "tone": "陈述型，常以「不可」开头",
+                 "sample_tag": "笑道"},
+            ],
+            "discarded_candidates": [],
+        },
     }
 
     prose = ["## 第〇部分：作家定义与读者契约（作家契约层）", "", "## 第一部分：定量风格分析报告（定量层）", ""]

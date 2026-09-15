@@ -37,6 +37,20 @@ boundary 必须包含：**禁用场景 + 退化成因 + 规避动作**。
 - 数值层标注数据源可靠性：直接（可精确测量）/ 启发式（分类统计）/ 弱信号（词汇语域）；
 - 结论层使用 高 / 中 / 待确认 三档，并说明哪些属于解释层推断。
 
+### 4.1 新指标的可靠性分级（schema 6 / M080–M099）
+
+低层测量层与知识层的指标按数据源分三档；**弱信号档不得单独支撑因果诊断**，只能作为旁证或候选：
+
+| 档位 | 指标 | 依据 |
+|---|---|---|
+| 直接 | `complex_word_ratio`、`ttr`、`ttr_filtered`、`hapax_ratio`、`hapax_count`、`avg_clauses_per_sentence`、`subordinate_ratio`、`coordinate_ratio`、词长分布、`verb_ratio` / `adjective_ratio`（分母为实词总数，四项之和为 1）、`avg_sentence_length_chars` / `avg_word_length_chars`、`entity_density`（计数口径）、跨期矩阵 6 维 | 分词与切分本身即测量，口径可复算 |
+| 启发式 | `readability_level`、`yang_chengshu_index`、`flesch_kincaid_grade`、`gunning_fog_index`、`smog_index`、`complexity_level`、`sent_len_bracket` | 公式为面向中文的适配（FK 第二项取「字/词」、Fog 取「词/句」），档位阈值是分类约定 |
+| 弱信号 | `sentiment_balance` / `dominant_tone`、世界观五类词汇表、`special_systems`、对话功能四类分布、`style_dna_candidates`、`cross_metric_signals` | 词汇表命中（语域近似）或规则派生候选，非独立结论 |
+
+**降级联动**：内嵌分词器缺失时（见 `SKILL.md` 的依赖说明），上表「直接」档中含分词口径的指标自动标注 `degraded: true`，同时降为弱信号——兜底正则会虚高 type 计数，TTR 与词性占比不再可比。
+
+**权威性**：`style_dna_candidates` 与 `cross_metric_signals` 在产物中一律标 `authoritative: false`，属于**提示词知识菜单**（喂给分析提示词的候选解读），不构成分析器结论。落地前必须由本次实测数值确认。
+
 ## 5. 量化禁令三元组（作家分身提示词）
 
 每条禁令必须是 **指标 + 数值 + 单位** 的可直接执行三元组，且能回溯到定量层实测值。

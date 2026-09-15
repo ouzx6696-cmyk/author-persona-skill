@@ -108,6 +108,34 @@ def _package_files() -> Iterable[tuple[str, bytes]]:
         yield (f"author_persona_skill/{path.relative_to(PACKAGE_ROOT).as_posix()}", path.read_bytes())
 
 
+#: Data suffixes carried by the vendored libraries (jieba dictionary and model
+#: modules). Kept explicit so a stray .pyc or editor backup can never ship.
+_VENDOR_SUFFIXES = {".py", ".txt", ".json"}
+_VENDOR_EXCLUDE_PARTS = {"__pycache__", ".pytest_cache", ".mypy_cache"}
+
+
+def _vendored_lib_files() -> Iterable[tuple[str, bytes]]:
+    """Map ``libs/`` into ``author_persona_skill/_vendored/`` for the wheel.
+
+    Namespacing the vendored copy under our own package is deliberate: a
+    top-level ``jieba`` in site-packages would shadow (or be shadowed by) a real
+    jieba install depending on sys.path order. ``_vendor.find_libs_path`` probes
+    this package-local location first.
+    """
+    libs_root = ROOT / "libs"
+    if not libs_root.is_dir():
+        return
+    for path in sorted(libs_root.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(libs_root)
+        if set(rel.parts) & _VENDOR_EXCLUDE_PARTS:
+            continue
+        if path.suffix not in _VENDOR_SUFFIXES and path.name != "LICENSE":
+            continue
+        yield (f"author_persona_skill/_vendored/{rel.as_posix()}", path.read_bytes())
+
+
 _BURN_MARKER_RE = re.compile(r"^VERSION = None  # __BURN_VERSION__$", re.M)
 
 
@@ -139,6 +167,8 @@ def _write_wheel(wheel_directory: str | os.PathLike[str], editable: bool) -> str
         files["author_persona_skill_editable.pth"] = (str(ROOT / "scripts") + "\n").encode("utf-8")
     else:
         files.update(dict(_package_files()))
+        # 内嵌 jieba 随 wheel 分发，命名空间在包内避免与真实 jieba 互相遮蔽。
+        files.update(dict(_vendored_lib_files()))
         # 必须放在 update 之后：覆盖 _package_files 收集到的源码树版本。
         files["author_persona_skill/_version.py"] = _burned_version_py()
     files.update(_dist_info_files())
@@ -169,7 +199,9 @@ def _sdist_files() -> Iterable[tuple[str, bytes]]:
         path = ROOT / name
         if path.is_file():
             yield (f"{prefix}/{name}", path.read_bytes())
-    for rel in ("scripts", "assets", "references"):
+    # libs/ carries the vendored jieba；没有它 sdist 装出来的包无法分词，
+    # 低层测量会静默降级为启发式。
+    for rel in ("scripts", "assets", "references", "libs"):
         base = ROOT / rel
         if not base.is_dir():
             continue

@@ -23,8 +23,8 @@ from pathlib import Path
 VERSION = None  # __BURN_VERSION__
 
 # Honest "unknown" marker. Deliberately NOT a stale release number: a wrong
-# number risks a silent contract mismatch downstream (novel-writer reads
-# report.json["schema_version"]), whereas 0.0.0 is obviously unresolved.
+# number risks a silent contract mismatch for any downstream reader of
+# report.json["schema_version"], whereas 0.0.0 is obviously unresolved.
 _UNRESOLVED = "0.0.0"
 
 

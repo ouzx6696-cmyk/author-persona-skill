@@ -10,6 +10,9 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+from .._numbers import trim_decimal
+from ..analyzers.knowledge import GENERIC_TABOO_PHRASES
+
 _MISSING = "未知（数据缺失）"
 
 
@@ -55,7 +58,7 @@ def _num_out(value: Optional[float], digits: int = 1) -> str:
     """Render a measured number or an explicit missing marker."""
     if value is None:
         return _MISSING
-    return f"{value:.{digits}f}".rstrip("0").rstrip(".")
+    return trim_decimal(value, digits)
 
 
 def _band(
@@ -293,6 +296,41 @@ def build_system_prompt(
         f"- 排比密度：{_band(par, 0.7, 1.3, '/千字', 2)}（实测基线 {_num_out(par, 2)}/千字）" if par is not None else "",
         f"- 极短段（≤8字）：仅用于重锤瞬间，占比不超过 {_pct(para.get('short_para_ratio_pct'))}",
     ])
+    # 描写配比与连续句禁令：归档版 build_customized_taboos 的极端值禁令，迭代中丢失。
+    # 每条都按实测占比决定方向（过少→上限，过多→下限），数值直接写进禁令文本，
+    # 从而满足 _assert_quantified_bans 的「指标+数值+单位」要求。
+    _desc_total = sum(
+        v for v in (_num(desc.get("action_count")), _num(desc.get("mental_count")),
+                    _num(desc.get("env_count"))) if v is not None)
+    _env_pct = (_num(desc.get("env_count")) / _desc_total * 100.0) if _desc_total else None
+    _psych_pct = (_num(desc.get("mental_count")) / _desc_total * 100.0) if _desc_total else None
+    _short_rate = _num(sent.get("short_sent_ratio"))
+    if _short_rate is None and sent.get("short_sent_ratio_pct") not in (None, ""):
+        _short_rate = _num(str(sent.get("short_sent_ratio_pct")).rstrip("%"))
+    if _short_rate is not None and _short_rate <= 1.0:
+        _short_rate *= 100.0
+    _dlg_ratio = _num(dlg.get("dialogue_ratio"))
+    _dialogue_driven = _dlg_ratio is not None and _dlg_ratio > 0.5
+
+    if _env_pct is not None:
+        if _env_pct < 10:
+            lines.append(f"- 环境描写：实测占比仅 {_env_pct:.1f}%，单次环境描写不超过 2 句，氛围靠角色感知呈现")
+        elif _env_pct > 30:
+            lines.append(f"- 环境描写：实测占比 {_env_pct:.1f}%（偏高），严禁省略环境铺陈，氛围营造是核心风格")
+    if _psych_pct is not None:
+        if _psych_pct < 15:
+            lines.append(f"- 纯心理描写：实测占比仅 {_psych_pct:.1f}%，连续纯心理不超过 2 句，情绪靠动作与对话暗示")
+        elif _psych_pct > 40:
+            lines.append(f"- 心理描写：实测占比 {_psych_pct:.1f}%（偏高），严禁完全省略内心刻画")
+    if _short_rate is not None and _short_rate > 30:
+        lines.append(f"- 长句连续：短句率 {_pct(sent.get('short_sent_ratio_pct'))}，禁止连续 3 句以上长句")
+    if _dlg_ratio is not None and _dlg_ratio > 0.5:
+        lines.append(f"- 纯叙事连续：对话占比 {_pct(dlg.get('dialogue_ratio_pct'))}，禁止连续 5 句以上纯叙事")
+    if avg_sent is not None and avg_sent < 18:
+        lines.append(f"- 句长上限：平均句长仅 {_num_out(avg_sent)} 字，禁止单句超过 25 字")
+    if qst is not None and exl is not None and qst > exl * 2:
+        lines.append(
+            f"- 叹号代问号：问号 {_num_out(qst, 2)}/千字 远多于感叹号 {_num_out(exl, 2)}/千字，禁止用感叹号替代疑问表达")
     _assert_quantified_bans(lines)
 
     # 2. Dialogue norms + synthetic demos
@@ -316,7 +354,45 @@ def build_system_prompt(
         "（违规原因是「用错了地方」，不是「用了这个标点」——该标点在铁律 4 允许的用法内仍可使用）。"
     )
 
-    # 3. Technique cards as callable directives
+    # 2b. 通用 AI 味禁用词（归档 GENERIC_TABOO_PHRASES）。这些是从语料本身
+    #     看不出「该少用」的书面连接词——它们是模型腔的通用指纹，与本文风无关，
+    #     因此以固定清单出现，不依赖任何实测指标。
+    lines.append("\n## 通用禁用词（AI 腔痕迹，一律禁用）\n")
+    lines.append("以下书面连接词属于模型腔与公文腔，任何题材、任何场景都不得出现：\n")
+    lines.append("、".join(f"「{p}」" for p in GENERIC_TABOO_PHRASES) + "。")
+    lines.append("改写方向：删掉连接词让句子直接并列，或用具体动作、感官细节承担过渡。\n")
+
+    # 3. Character voice reference — the desensitized voiceprint block.
+    #    Keys are archetype labels (原型甲…), never real names: the persona is for
+    #    writing new stories, so the point is carryable speech habits, not identity.
+    voiceprint = report_json.get("voiceprint") or {}
+    lines.append("\n## 角色声音参考（实测话术习惯）\n")
+    if isinstance(voiceprint, dict) and voiceprint:
+        lines.append("以下原型口吻由语料实测得出：为每个角色安排一套稳定的口吻，"
+                     "同一角色跨场景保持一致，不同角色之间要有可辨识差异。\n")
+        for label, vp in voiceprint.items():
+            if not isinstance(vp, dict):
+                continue
+            tone = vp.get("tone_type") or _MISSING
+            avg_len = _num(vp.get("avg_speech_len"))
+            bits = [f"口吻类型：{tone}"]
+            if avg_len is not None:
+                bits.append(f"平均台词长度：{_num_out(avg_len, 1)} 字（{_band(avg_len, 0.7, 1.3, '字', 1)}）")
+            tags = "、".join(f"「{t}」" for t in (vp.get("common_tags") or []) if t)
+            if tags:
+                bits.append(f"常用标签：{tags}")
+            phrases = [p for p in (vp.get("catchphrases") or []) if p]
+            if phrases:
+                bits.append(f"口头禅：{'、'.join(f'「{p}」' for p in phrases)}")
+            openers = [p for p in (vp.get("opening_words") or []) if p]
+            if openers:
+                bits.append(f"常见起句：{'、'.join(f'「{p}」' for p in openers)}")
+            lines.append(f"### {label}\n- " + "\n- ".join(bits))
+        lines.append("\n> 注意：上表是各原型的**相对差异**，用于区分角色；"
+                     "全篇标点密度与句长仍以铁律 4 与量化禁令的实测基线为准。")
+    else:
+        lines.append("- （未取得可用的实测话术数据，按对话规范执行即可）")
+
     lines.append("\n## 技法调用指令\n")
     if cards:
         for idx, card in enumerate(cards, 1):

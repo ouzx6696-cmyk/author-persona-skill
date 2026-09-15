@@ -1,5 +1,15 @@
 # -*- coding: utf-8 -*-
-"""Quantitative style analyzer (17 dimensions + scene switching density + clean stats)."""
+"""Quantitative style analyzer.
+
+Returns 15 blocks: text_summary / sentence_structure / paragraph_rhythm /
+dialogue_features / punctuation_density / punctuation_ratios / rhetoric_features /
+perspective_and_narration / description_density / imagery_clusters /
+style_markers / knowledge_layer / low_level_features / worldview_vocab /
+semantic_dimensions (plus the dialogue-embedded voiceprint data). Low-level
+measurement (readability, TTR, hapax, clause complexity, sentiment, word length,
+POS, entities, worldview) lives in ``analyzers/low_level.py``; the
+correlation/DNA knowledge menu lives in ``analyzers/knowledge.py``.
+"""
 from __future__ import annotations
 
 import re
@@ -9,6 +19,9 @@ from typing import Any, Dict, List, Optional
 from .noise import filter_noise
 from .dialogue_analyzer import DialogueAnalyzer
 from .rhetoric import count_similes
+from .knowledge import build_knowledge_layer
+from .low_level import analyze_low_level_with_worldview, sent_len_bracket as sent_len_bracket_label
+from .cross_era import build_semantic_dimensions
 
 
 def compute_median(numbers: List[float]) -> float:
@@ -82,14 +95,7 @@ class StyleAnalyzer:
         short_sent_ratio = round(len(short_sentences) / total_sentences, 4)
         long_sent_ratio = round(len(long_sentences) / total_sentences, 4)
 
-        if avg_sent_len < 18:
-            sent_len_bracket = "极短 (高频快节奏/碎片推进)"
-        elif avg_sent_len <= 25:
-            sent_len_bracket = "中短 (清晰利落/动势平稳)"
-        elif avg_sent_len <= 35:
-            sent_len_bracket = "中长 (稳健叙事/适度铺陈)"
-        else:
-            sent_len_bracket = "长句 (绵密复杂/深度描摹)"
+        sent_len_bracket = sent_len_bracket_label(avg_sent_len)
 
         # 3. Punctuation stats (per 1000 chars).
         # Units are punctuation *occurrences*: "……" and "——" each count once,
@@ -240,7 +246,7 @@ class StyleAnalyzer:
         if not style_markers:
             style_markers.append(f"各项指标处于常规区间（平均句长 {avg_sent_len} 字，对话占比 {dialogue_data['dialogue_ratio_pct']}）")
 
-        return {
+        result = {
             "text_summary": {
                 "total_chars": total_chars,
                 "total_paragraphs": total_paragraphs,
@@ -291,6 +297,18 @@ class StyleAnalyzer:
             "imagery_clusters": dict(sorted(imagery_counts.items(), key=lambda x: x[1], reverse=True)[:8]),
             "style_markers": style_markers[:5],
         }
+        # 知识层：维度间关联信号、风格 DNA 候选、通用禁用词。全部标注非权威，
+        # 只是喂给分析提示词的候选菜单（见 analyzers/knowledge.py 的说明）。
+        result["knowledge_layer"] = build_knowledge_layer(result)
+        # 低层测量层：可读性四式 / TTR / hapax / 分句复杂度 / 情感 / 词长 / 词性 /
+        # 实体 / 世界观五类。两块共享同一次分词，缺失分词器时整块标注 degraded。
+        result["low_level_features"], result["worldview_vocab"] = (
+            analyze_low_level_with_worldview(clean_text))
+        # 语义子维度：对话功能分布复用 dialogue_features 已算好的实测值（原始引语
+        # 只在 dialogue_analyzer 内可见），POV 稳定性在此补。
+        result["semantic_dimensions"] = build_semantic_dimensions(
+            clean_text, dialogue_functions=dialogue_data.get("dialogue_functions"))
+        return result
 
     def _empty_result(self, noise_stats: Dict[str, Any]) -> Dict[str, Any]:
         """Shape-compatible empty result so callers never branch on missing keys."""

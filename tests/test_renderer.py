@@ -12,6 +12,7 @@ from author_persona_skill.report.renderer import (
     _compose_single_source,
     extract_json_block,
     render_report_outputs,
+    REPORT_SCHEMA_VERSION,
 )
 
 from tests import _fixtures as fx
@@ -114,7 +115,7 @@ class PublicArtifactTest(unittest.TestCase):
         for key in ("report_md_path", "report_json_path", "manifest_path"):
             self.assertTrue(Path(saved[key]).is_file(), key)
         manifest = json.loads(Path(saved["manifest_path"]).read_text(encoding="utf-8"))
-        self.assertEqual(manifest["schema_version"], "5")
+        self.assertEqual(manifest["schema_version"], REPORT_SCHEMA_VERSION)
         self.assertNotIn("测试书", json.dumps(manifest, ensure_ascii=False))
 
     def test_malformed_placeholder_is_rejected(self):

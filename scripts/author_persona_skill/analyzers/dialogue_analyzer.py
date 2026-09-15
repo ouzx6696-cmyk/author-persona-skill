@@ -6,6 +6,10 @@ import re
 from collections import Counter, defaultdict
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from .cross_era import measure_dialogue_functions
+
+from . import tokenizer
+
 
 TAG_WHITELIST = {
     "道", "说", "问", "答", "喊", "笑", "喝", "叹", "骂", "吼", "嘟囔", "嘀咕", "自语", "心道",
@@ -150,6 +154,75 @@ class DialogueAnalyzer:
         # curly and corner brackets, so 「…」 pairs match the same way “…” do.
         self.quote_pattern = re.compile(r'[“"「]([\s\S]*?)[”"」]')
 
+    # ------------------------------------------------------------------
+    # Voiceprint helpers: per-speaker speech habits.
+    #
+    # These describe *how a character talks* (tone, catchphrases, sentence
+    # openers), which is what lets section 1.9 and the `dialogue_review` block
+    # be grounded in measurement instead of invented archetypes.
+    # ------------------------------------------------------------------
+
+    def _classify_tone(self, quotes: List[str]) -> str:
+        """Classify a speaker's register by how their lines terminate.
+
+        Question-led speech (>30% ending in ？) reads as 疑问型; exclamatory
+        speech (>20% ending in ！) as 命令型; everything else is 陈述型.
+        """
+        total = 0
+        question_count = 0
+        exclamation_count = 0
+        for text in quotes:
+            stripped = text.strip()
+            if not stripped:
+                continue
+            total += 1
+            last_char = stripped[-1]
+            if last_char in ("?", "？"):
+                question_count += 1
+            elif last_char in ("!", "！"):
+                exclamation_count += 1
+        if total == 0:
+            return "陈述型"
+        if question_count / total > 0.3:
+            return "疑问型"
+        if exclamation_count / total > 0.2:
+            return "命令型"
+        return "陈述型"
+
+    def _extract_fixed_phrases(self, quotes: List[str]) -> List[str]:
+        """High-frequency multi-character phrases a speaker reaches for often.
+
+        Frequency alone is a weak signal with small samples, so the floor scales
+        with the speaker's line count (``max(2, n // 10)``): a character with 40
+        lines must repeat a phrase at least 4 times before it counts as a habit.
+        """
+        if not quotes:
+            return []
+        words = tokenizer.cut(" ".join(quotes))
+        counter = Counter(word for word in words if len(word.strip()) >= 2)
+        if not counter:
+            return []
+        min_freq = max(2, len(quotes) // 10)
+        return [
+            word for word, freq in counter.most_common(30)
+            if freq >= min_freq
+        ][:10]
+
+    def _count_opening_words(self, quotes: List[str]) -> List[str]:
+        """Words a speaker habitually opens their lines with."""
+        counter: Counter[str] = Counter()
+        for text in quotes:
+            stripped = text.strip()
+            if not stripped:
+                continue
+            words = tokenizer.cut(stripped)
+            if words and len(words[0].strip()) >= 2:
+                counter[words[0].strip()] += 1
+        if not counter:
+            return []
+        min_freq = max(2, len(quotes) // 15)
+        return [word for word, freq in counter.most_common(10) if freq >= min_freq]
+
     def extract_dialogues(self, text: str, chapters: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """
         Extract dialogue segments, speaker tags, and distinguish high vs low confidence speakers.
@@ -267,6 +340,10 @@ class DialogueAnalyzer:
             if detected_speaker:
                 speaker_occurrences[detected_speaker].append({
                     "quote": quote_text[:50],
+                    # Full line kept privately for voiceprint statistics; it never
+                    # reaches a public artifact (renderer strips sample_quotes and
+                    # the voiceprint block carries only mapped/neutral values).
+                    "text": quote_text,
                     "tag": detected_tag or "道",
                     "chapter": c_idx,
                 })
@@ -302,7 +379,10 @@ class DialogueAnalyzer:
             num_chapters = len(canonical_chapters[name])
             avg_quote_len = sum(len(o["quote"]) for o in occs) / max(count, 1)
 
-            fav_tag = Counter(o["tag"] for o in occs).most_common(1)[0][0] if occs else "道"
+            tag_counter = Counter(o["tag"] for o in occs)
+            fav_tag = tag_counter.most_common(1)[0][0] if occs else "道"
+            # Full lines, used only to derive habits below; not stored on the profile.
+            full_quotes = [str(o.get("text", "")).strip() for o in occs if str(o.get("text", "")).strip()]
 
             speaker_profile = {
                 "name": name,
@@ -310,6 +390,10 @@ class DialogueAnalyzer:
                 "chapters_count": num_chapters,
                 "avg_dialogue_len": round(avg_quote_len, 1),
                 "fav_tag": fav_tag,
+                "common_tags": [tag for tag, _ in tag_counter.most_common(3)],
+                "tone_type": self._classify_tone(full_quotes),
+                "fixed_phrases": self._extract_fixed_phrases(full_quotes),
+                "opening_words": self._count_opening_words(full_quotes),
                 "sample_quotes": [o["quote"] for o in occs[:3]],
             }
             if alias_trace.get(name):
@@ -336,6 +420,21 @@ class DialogueAnalyzer:
         shuo_count = sum(v for k, v in tag_counts.items() if k.endswith("说"))
         dao_shuo_ratio = round(dao_count / max(shuo_count, 1), 2)
 
+        # Tags used by exactly one identified speaker are a strong voiceprint
+        # signal: they distinguish characters even when the tag pool is narrow.
+        tag_to_speakers: Dict[str, Set[str]] = defaultdict(set)
+        for profile in high_confidence_speakers:
+            for tag in profile.get("common_tags", []):
+                tag_to_speakers[tag].add(str(profile.get("name", "")))
+        unique_tags: Dict[str, Dict[str, Any]] = {}
+        for tag, speakers in tag_to_speakers.items():
+            if len(speakers) == 1:
+                owner = next(iter(speakers))
+                unique_tags[tag] = {"speaker": owner, "count": int(tag_counts.get(tag, 0))}
+        # Deterministic order: strongest evidence first, then tag name.
+        unique_tags = dict(sorted(
+            unique_tags.items(), key=lambda kv: (-kv[1]["count"], kv[0]))[:10])
+
         return {
             "total_quotes": len(raw_quotes),
             "dialogue_chars": dialogue_chars,
@@ -343,6 +442,10 @@ class DialogueAnalyzer:
             "dialogue_ratio_pct": f"{dialogue_ratio * 100:.2f}%",
             "tag_frequencies": dict(tag_counts.most_common(15)),
             "dao_shuo_ratio": dao_shuo_ratio,
+            "unique_tags": unique_tags,
+            # 对话功能分布（信息交换/冲突对抗/情感表达/日常闲聊）。原始引语只在
+            # 本方法内可见，这里只返回聚合分布，不落任何台词文本。
+            "dialogue_functions": measure_dialogue_functions(raw_quotes),
             "high_confidence_speakers": high_confidence_speakers[:10],
             "low_confidence_candidates": [c["name"] for c in low_confidence_candidates[:20]],
         }

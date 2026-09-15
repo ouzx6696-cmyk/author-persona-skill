@@ -13,6 +13,8 @@ from author_persona_skill.distill.technique_cards import (
 from author_persona_skill.distill.thinking_layer import ThinkingLayer
 from author_persona_skill.distill.writer_contract import NOT_PROVIDED, WriterContract
 
+from tests import _fixtures as fx
+
 
 def _card(**overrides):
     data = {
@@ -152,6 +154,47 @@ class ClaimTest(unittest.TestCase):
         )
         self.assertEqual(errors, [])
         self.assertTrue(warnings)
+
+
+class ReportSchemaSixTest(unittest.TestCase):
+    """schema 6 的根级字段必须齐备——它们各自对应一项从 v7.0.0 恢复的能力。"""
+
+    REQUIRED_ROOT_KEYS = (
+        "version", "schema_version", "artifact_policy", "meta",
+        "writer_contract", "quantitative_features", "voiceprint",
+        "cross_era_matrix", "deployment_config", "style_templates",
+        "technique_cards", "thinking_layer", "desensitization_map",
+        "dialogue_review", "provenance", "validation_summary",
+        "artifact_diagnostics",
+    )
+
+    def _report_json(self):
+        from author_persona_skill.report.renderer import (
+            extract_json_block, render_report_outputs)
+        prep = fx.prepared(key="schema6")
+        prose, data = extract_json_block(fx.valid_response(prep))
+        rendered = render_report_outputs(
+            prose_markdown=prose, parsed_json=data, prepare_result=prep, base_name="契约")
+        return rendered["report_json"]
+
+    def test_schema_version_is_six(self):
+        from author_persona_skill.report.renderer import REPORT_SCHEMA_VERSION
+        self.assertEqual(REPORT_SCHEMA_VERSION, "6")
+        self.assertEqual(self._report_json()["schema_version"], "6")
+
+    def test_root_keys_present(self):
+        report_json = self._report_json()
+        for key in self.REQUIRED_ROOT_KEYS:
+            self.assertIn(key, report_json, key)
+
+    def test_prepare_contract_stays_v1(self):
+        """prepare 契约不随 schema 6 升版：新字段走可选键，旧 prep 仍可 finalize。"""
+        from author_persona_skill.contracts import PREPARE_SCHEMA_VERSION
+        self.assertEqual(PREPARE_SCHEMA_VERSION, "1")
+
+    def test_metric_version_is_four(self):
+        from author_persona_skill.report.metrics import METRIC_VERSION
+        self.assertEqual(METRIC_VERSION, "4")
 
 
 if __name__ == "__main__":

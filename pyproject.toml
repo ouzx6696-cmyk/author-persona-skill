@@ -5,7 +5,7 @@ backend-path = ["."]
 
 [project]
 name = "author-persona-skill"
-version = "10.2.0"
+version = "11.0.0"
 description = "脱敏、分层采样与可验证风格能力报告工具"
 requires-python = ">=3.10"
 dependencies = []
@@ -27,7 +27,9 @@ target-version = "py310"
 # 只开语法错误与 Pyflakes：未用导入/未用局部变量这类真实缺陷。
 # 刻意不开默认全量规则（UP/I 等风格项会产出数百条噪音），保持信号干净。
 line-length = 120
-extend-exclude = ["dist", "assets"]
+# libs/ 是随包分发的第三方内嵌依赖（jieba），不参与本仓代码质量判定：
+# 对它跑 lint 只会产出与上游实现风格有关的噪音。
+extend-exclude = ["dist", "assets", "libs"]
 
 [tool.ruff.lint]
 select = ["E9", "F"]

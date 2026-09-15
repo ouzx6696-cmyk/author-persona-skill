@@ -54,6 +54,45 @@ def _format_era_excerpts(era_excerpts: List[Dict[str, Any]]) -> str:
     return "\n\n".join(blocks)
 
 
+def _format_knowledge_menu(quant: Dict[str, Any]) -> str:
+    """知识层菜单：候选解读，必须由本次实测数值落地后才可采用。
+
+    这些信号由确定性规则从实测指标推得（见 analyzers/knowledge.py），但它们只
+    是**候选**——分析器不下文学结论。措辞上明确要求模型先核对实测数值，避免把
+    菜单当成既定事实照抄。
+    """
+    layer = (quant or {}).get("knowledge_layer")
+    if not isinstance(layer, dict):
+        return ""
+    signals = layer.get("cross_metric_signals") or []
+    dna = layer.get("style_dna_candidates") or []
+    taboos = layer.get("generic_taboo_phrases") or []
+    if not signals and not dna and not taboos:
+        return ""
+
+    lines = ["### 5. 知识层候选（**非结论**：须由本次实测数值落地后才可采用）", ""]
+    if signals:
+        lines.append("维度间关联信号（规则命中，供交叉验证用）：")
+        for sig in signals:
+            basis = sig.get("basis") or {}
+            basis_text = "、".join(f"{k}={v}" for k, v in basis.items())
+            lines.append(f"- [{sig.get('rule_id')}] {sig.get('signal')}（依据：{basis_text}）")
+        lines.append("")
+    if dna:
+        lines.append("风格 DNA 候选（打分降序，阈值表推导，**不具权威性**）：")
+        for item in dna:
+            lines.append(f"- {item.get('label')}（得分 {item.get('score')}）")
+        lines.append("")
+    if taboos:
+        lines.append("通用禁用词（AI 腔痕迹，报告正文一律不得使用）：")
+        lines.append("、".join(f"「{p}」" for p in taboos) + "。")
+        lines.append("")
+    lines.append("使用约束：以上候选只是**待验证的解读方向**。只有当本次实测数值确实"
+                 "支持该方向时，才可在报告正文中采用；数值不支持的候选必须舍弃，禁止"
+                 "把候选标签直接当作风格结论照抄。")
+    return "\n".join(lines) + "\n"
+
+
 def build_analysis_prompt(
     quantitative_data: Dict[str, Any],
     evidence_pool: List[Dict[str, Any]],
@@ -83,7 +122,7 @@ def build_analysis_prompt(
     excerpts_section = ""
     if era_excerpts:
         excerpts_section = f"""
-### 5. 五时期代表片段（深读材料，锚点不足时的唯一合法补充依据）
+### 6. 五时期代表片段（深读材料，锚点不足时的唯一合法补充依据）
 {_format_era_excerpts(era_excerpts)}
 """
 
@@ -94,6 +133,8 @@ def build_analysis_prompt(
 
     baseline_section = f"""
 {QUALITY_BASELINE}"""
+
+    knowledge_section = _format_knowledge_menu(quantitative_data)
 
     prompt = f"""# 小说风格能力解构任务
 
@@ -133,7 +174,7 @@ def build_analysis_prompt(
 ```json
 {dialogue_json}
 ```
-{excerpts_section}
+{knowledge_section}{excerpts_section}
 ---
 
 ## 阶段二：输出格式与结构规范
@@ -161,6 +202,8 @@ def build_analysis_prompt(
 ### 1.11 风格标记（3-6 条，每条必须挂至少一个数据依据）
 
 **1.9 / 1.10 / 1.11 同样是诊断节而非清单节**：每节必须有命名型总起句 + 至少 80 字机制诊断（说明该维度的机制如何作用于阅读效果），禁止退化为纯列表堆砌。
+
+**1.9 的实测锚点**：上方「4. 角色与对白检出数据」已给出每个高置信说话人的实测 `tone_type`（疑问型/命令型/陈述型）、`common_tags`（常用标签）、`fixed_phrases`（口头禅）、`opening_words`（常见起句）。每个原型的口吻规则必须由这些实测字段落地（如「该原型为疑问型，起句集中在一类疑问词，主力标签为某某」），不得凭印象描述口吻；实测字段为空的维度就不写，禁止补写。同时把同一批实测角色填入末尾 JSON 的 `dialogue_review.confirmed_profiles`：每项 `{{role: 原型标签, tone: 口吻描述, sample_tag: 典型标签}}`，role 只能取脱敏映射给出的原型标签（出现原名将被脱敏拒绝），tone 必须非空，sample_tag 须取自该角色的实测常用标签；**实测到多名高置信说话人时禁止留空**。
 
 ### 第二部分：核心写作技法提取（技法调用卡层）
 本部分正文由末尾 JSON 机器数据块自动渲染：**Markdown 里只输出"## 第二部分：核心写作技法提取（技法调用卡层）"标题行本身，不要撰写技法卡正文**；全部技法卡内容写入 JSON 的 technique_cards。

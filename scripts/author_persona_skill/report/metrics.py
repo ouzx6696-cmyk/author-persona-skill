@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple
 # can never be confused (total_chars uses sample scope, noise uses
 # whole-book scope).
 # ---------------------------------------------------------------------------
-METRIC_VERSION = "3"
+METRIC_VERSION = "4"
 
 # (mid, placeholder_token, unit, scope, formula)
 METRIC_DEFS: Tuple[Tuple[str, str, str, str, str], ...] = (
@@ -48,6 +48,25 @@ METRIC_DEFS: Tuple[Tuple[str, str, str, str, str], ...] = (
     ("M061", "rhetorical_question_density", "/kchars", "sample", "rq*1000/chars"),
     ("M062", "parallelism_density", "/kchars", "sample", "parallel*1000/chars"),
     ("M070", "action_mental_ratio", "ratio", "sample", "action/max(mental,1)"),
+    # 低层测量层（W5）。全部为启发式/分词依赖指标，进注册表供占位符与审计使用，
+    # 但**不进 CORE_AUDIT_TOKENS** —— 核心 8 项保持稳定，避免下游预期漂移；这些
+    # 新指标冲突只 warning（见 quality-baseline §4 的数据源可靠性分级）。
+    ("M080", "readability_level", "label", "sample", "3-factor band"),
+    ("M081", "gunning_fog_index", "index", "sample", "0.4*(words/sent+100*complex_ratio)"),
+    ("M082", "yang_chengshu_index", "index", "sample", "0.4*(chars/sent+100*complex_ratio)"),
+    ("M083", "flesch_kincaid_grade", "index", "sample", "0.39*chars/sent+11.8*chars/word-15.59"),
+    ("M084", "smog_index", "index", "sample", "SMOG adapted"),
+    ("M085", "complex_word_ratio", "ratio", "sample", "len>=4/n_words"),
+    ("M090", "ttr", "ratio", "sample", "types/tokens"),
+    ("M091", "ttr_filtered", "ratio", "sample", "types(2+)/tokens(2+)"),
+    ("M092", "hapax_ratio", "ratio", "sample", "hapax/types"),
+    ("M093", "avg_clauses_per_sentence", "count", "sample", "clauses/n_sent"),
+    ("M094", "subordinate_ratio", "ratio", "sample", "subordinate/clauses"),
+    ("M095", "coordinate_ratio", "ratio", "sample", "coordinate/clauses"),
+    ("M096", "sentiment_balance", "ratio", "sample", "(pos-neg)/(pos+neg)"),
+    ("M097", "entity_density", "ratio", "sample", "entities/tokens"),
+    ("M098", "verb_ratio", "ratio", "sample", "verb/content_words"),
+    ("M099", "adjective_ratio", "ratio", "sample", "adj/content_words"),
 )
 
 _TOKEN_TO_MID = {tok: mid for mid, tok, _u, _s, _f in METRIC_DEFS}
@@ -157,6 +176,35 @@ def build_placeholder_map(quant: Dict[str, Any]) -> Dict[str, str]:
         "action_mental_ratio": _fmt(desc.get("action_mental_ratio", "")),
         "driver_mode": _fmt(desc.get("driver_mode", "")),
     }
+    # 低层测量层占位符（M080–M099）。字段缺失时整键不出现，占位符会保持未替换
+    # 状态并被审计列出，而不是渲染成空串。
+    low = quant.get("low_level_features", {}) or {}
+    readability = low.get("readability", {}) or {}
+    vocab = low.get("vocabulary_richness", {}) or {}
+    complexity = low.get("sentence_complexity", {}) or {}
+    sentiment = low.get("sentiment", {}) or {}
+    pos_dist = low.get("pos_distribution", {}) or {}
+    entities = low.get("named_entities", {}) or {}
+    mapping.update({
+        "readability_level": _fmt(readability.get("readability_level", "")),
+        "avg_sentence_length_chars": _fmt(readability.get("avg_sentence_length_chars", "")),
+        "avg_word_length_chars": _fmt(readability.get("avg_word_length_chars", "")),
+        "gunning_fog_index": _fmt(readability.get("gunning_fog_index", "")),
+        "yang_chengshu_index": _fmt(readability.get("yang_chengshu_index", "")),
+        "flesch_kincaid_grade": _fmt(readability.get("flesch_kincaid_grade", "")),
+        "smog_index": _fmt(readability.get("smog_index", "")),
+        "complex_word_ratio": _fmt(readability.get("complex_word_ratio", "")),
+        "ttr": _fmt(vocab.get("ttr", "")),
+        "ttr_filtered": _fmt(vocab.get("ttr_filtered", "")),
+        "hapax_ratio": _fmt(vocab.get("hapax_ratio", "")),
+        "avg_clauses_per_sentence": _fmt(complexity.get("avg_clauses_per_sentence", "")),
+        "subordinate_ratio": _fmt(complexity.get("subordinate_ratio", "")),
+        "coordinate_ratio": _fmt(complexity.get("coordinate_ratio", "")),
+        "sentiment_balance": _fmt(sentiment.get("sentiment_balance", "")),
+        "entity_density": _fmt(entities.get("entity_density", "")),
+        "verb_ratio": _fmt(pos_dist.get("verb_ratio", "")),
+        "adjective_ratio": _fmt(pos_dist.get("adjective_ratio", "")),
+    })
     return {k: v for k, v in mapping.items() if v != ""}
 
 
@@ -223,6 +271,17 @@ _AUDIT_RULES = [
     ("total_chars", r"(?:总字符数|总字符|字符总数)[^。；\n\d]{0,6}?(\d[\d,]*)\s*(?:字符|字)", "rel", 0.02),
     ("third_person_count", r"第三人称[^。；\n\d]{0,6}?(\d[\d,]*)\s*次", "rel", 0.06),
     ("first_person_count", r"第一人称[^。；\n\d]{0,6}?(\d[\d,]*)\s*次", "rel", 0.06),
+    # 低层测量指标：启发式/分词依赖，容差放宽且不在 CORE_AUDIT_TOKENS 内，
+    # 冲突只提示不阻断（见 METRIC_DEFS 上方说明）。
+    ("ttr", r"(?:类符形符比|词汇丰富度|TTR)[^。；\n\d]{0,6}(\d+(?:\.\d+)?)", "rel", 0.20),
+    ("ttr_filtered", r"(?:过滤后TTR|实词丰富度)[^。；\n\d]{0,6}(\d+(?:\.\d+)?)", "rel", 0.20),
+    ("hapax_ratio", r"(?:低频词|仅出现一次的词)占比[^。；\n\d]{0,6}(\d+(?:\.\d+)?)\s*%?", "rel", 0.25),
+    ("avg_clauses_per_sentence", r"平均每句(?:分句|小句)数[^。；\n\d]{0,6}(\d+(?:\.\d+)?)", "rel", 0.15),
+    ("entity_density", r"(?:命名)?实体密度[^。；\n\d]{0,6}(\d+(?:\.\d+)?)", "rel", 0.25),
+    ("complex_word_ratio", r"复杂词占比[^。；\n\d]{0,6}(\d+(?:\.\d+)?)\s*%?", "rel", 0.25),
+    ("sentiment_balance", r"情感(?:平衡|倾向)值[^。；\n\d\-]{0,6}(-?\d+(?:\.\d+)?)", "abs", 0.25),
+    ("gunning_fog_index", r"(?:Gunning[- ]?Fog|枪雾指数|古宁雾指数)[^。；\n\d]{0,6}(\d+(?:\.\d+)?)", "rel", 0.25),
+    ("smog_index", r"SMOG[^。；\n\d]{0,6}(\d+(?:\.\d+)?)", "rel", 0.25),
 ]
 
 # Hard-fail metrics: the load-bearing numbers a reader would use to actually
